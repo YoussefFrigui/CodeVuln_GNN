@@ -1,0 +1,122 @@
+[
+  {
+    "advisory_id": "GHSA-3hq4-f2v6-q338",
+    "cwe_ids": [
+      "CWE-352"
+    ],
+    "filename": "kotti/tests/__init__.py",
+    "vulnerable_function": "def connection(custom_settings):\n    \"\"\" sets up a SQLAlchemy engine and returns a connection to the database.\n    The connection string used for testing can be specified via the\n    ``KOTTI_TEST_DB_STRING`` environment variable.  The ``custom_settings``\n    fixture is needed to allow users to import their models easily instead of\n    having to override the ``connection``.\n    \"\"\"\n    # the following setup is based on `kotti.resources.initialize_sql`,\n    # except that it explicitly binds the session to a specific connection\n    # enabling us to use savepoints independent from the orm, thus allowing\n    # to `rollback` after using `transaction.commit`...\n    from sqlalchemy import create_engine\n    from kotti import DBSession\n    from kotti import metadata\n    from kotti.resources import _adjust_for_engine\n    from kotti.testing import testing_db_url\n    engine = create_engine(testing_db_url())\n    _adjust_for_engine(engine)\n    connection = engine.connect()\n    DBSession.registry.clear()\n    DBSession.configure(bind=connection)\n    metadata.bind = engine\n    return connection\n\n\n@fixture(scope='session')",
+    "fixed_function": "def connection(custom_settings):\n    \"\"\" sets up a SQLAlchemy engine and returns a connection to the database.\n    The connection string used for testing can be specified via the\n    ``KOTTI_TEST_DB_STRING`` environment variable.  The ``custom_settings``\n    fixture is needed to allow users to import their models easily instead of\n    having to override the ``connection``.\n    \"\"\"\n    # the following setup is based on `kotti.resources.initialize_sql`,\n    # except that it explicitly binds the session to a specific connection\n    # enabling us to use savepoints independent from the orm, thus allowing\n    # to `rollback` after using `transaction.commit`...\n    from sqlalchemy import create_engine\n    from kotti import DBSession\n    from kotti import metadata\n    from kotti.resources import _adjust_for_engine\n    from kotti.testing import testing_db_url\n    engine = create_engine(testing_db_url())\n    _adjust_for_engine(engine)\n    connection = engine.connect()\n    DBSession.registry.clear()\n    DBSession.configure(bind=connection)\n    metadata.bind = engine\n    return connection\n\n\n@fixture",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-3jqw-crqj-w8qw",
+    "cwe_ids": [
+      "CWE-1088"
+    ],
+    "filename": "django/db/models/fields/__init__.py",
+    "vulnerable_function": "    def formfield(self, **kwargs):\n        defaults = {'form_class': forms.TimeField}\n        defaults.update(kwargs)\n        return super(TimeField, self).formfield(**defaults)\n",
+    "fixed_function": "    def formfield(self, **kwargs):\n        defaults = {'form_class': forms.TimeField}\n        defaults.update(kwargs)\n        return super(TimeField, self).formfield(**defaults)\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-3jqw-crqj-w8qw",
+    "cwe_ids": [
+      "CWE-1088"
+    ],
+    "filename": "tests/modeltests/validation/models.py",
+    "vulnerable_function": "def validate_answer_to_universe(value):\n    if value != 42:\n        raise ValidationError('This is not the answer to life, universe and everything!', code='not42')\n",
+    "fixed_function": "def validate_answer_to_universe(value):\n    if value != 42:\n        raise ValidationError('This is not the answer to life, universe and everything!', code='not42')\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-3jqw-crqj-w8qw",
+    "cwe_ids": [
+      "CWE-1088"
+    ],
+    "filename": "tests/modeltests/validation/tests.py",
+    "vulnerable_function": "    def test_wrong_url_value_raises_error(self):\n        mtv = ModelToValidate(number=10, name='Some Name', url='not a url')\n        self.assertFieldFailsValidationWithMessage(mtv.full_clean, 'url', [u'Enter a valid value.'])\n",
+    "fixed_function": "    def test_wrong_url_value_raises_error(self):\n        mtv = ModelToValidate(number=10, name='Some Name', url='not a url')\n        self.assertFieldFailsValidationWithMessage(mtv.full_clean, 'url', [u'Enter a valid value.'])\n\n    #The tests below which use url_verify are deprecated",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-3jqw-crqj-w8qw",
+    "cwe_ids": [
+      "CWE-1088"
+    ],
+    "filename": "tests/regressiontests/forms/tests/fields.py",
+    "vulnerable_function": "    def test_urlfield_3(self):\n        f = URLField(verify_exists=True)\n        self.assertEqual(u'http://www.google.com/', f.clean('http://www.google.com')) # This will fail if there's no Internet connection\n        self.assertRaisesErrorWithMessage(ValidationError, \"[u'Enter a valid URL.']\", f.clean, 'http://example')\n        self.assertRaises(ValidationError, f.clean, 'http://www.broken.djangoproject.com') # bad domain\n        self.assertRaises(ValidationError, f.clean, 'http://qa-dev.w3.org/link-testsuite/http.php?code=405') # Method not allowed\n        try:\n            f.clean('http://www.broken.djangoproject.com') # bad domain\n        except ValidationError, e:\n            self.assertEqual(\"[u'This URL appears to be a broken link.']\", str(e))\n        self.assertRaises(ValidationError, f.clean, 'http://google.com/we-love-microsoft.html') # good domain, bad page\n        try:\n            f.clean('http://google.com/we-love-microsoft.html') # good domain, bad page\n        except ValidationError, e:\n            self.assertEqual(\"[u'This URL appears to be a broken link.']\", str(e))\n",
+    "fixed_function": "    def test_urlfield_3(self):\n        f = URLField(verify_exists=True)\n        self.assertEqual(u'http://www.google.com/', f.clean('http://www.google.com')) # This will fail if there's no Internet connection\n        self.assertRaisesErrorWithMessage(ValidationError, \"[u'Enter a valid URL.']\", f.clean, 'http://example')\n        self.assertRaises(ValidationError, f.clean, 'http://www.broken.djangoproject.com') # bad domain\n        self.assertRaises(ValidationError, f.clean, 'http://qa-dev.w3.org/link-testsuite/http.php?code=405') # Method not allowed\n        try:\n            f.clean('http://www.broken.djangoproject.com') # bad domain\n        except ValidationError, e:\n            self.assertEqual(\"[u'This URL appears to be a broken link.']\", str(e))\n        self.assertRaises(ValidationError, f.clean, 'http://qa-dev.w3.org/link-testsuite/http.php?code=400') # good domain, bad page\n        try:\n            f.clean('http://google.com/we-love-microsoft.html') # good domain, bad page\n        except ValidationError, e:\n            self.assertEqual(\"[u'This URL appears to be a broken link.']\", str(e))\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-5j2h-h5hg-3wf8",
+    "cwe_ids": [
+      "CWE-352"
+    ],
+    "filename": "django/contrib/csrf/middleware.py",
+    "vulnerable_function": "    def process_view(self, request, callback, callback_args, callback_kwargs):\n        if request.method == 'POST':\n            if getattr(callback, 'csrf_exempt', False):\n                return None\n\n            if request.is_ajax():\n                return None\n\n            try:\n                session_id = request.COOKIES[settings.SESSION_COOKIE_NAME]\n            except KeyError:\n                # No session, no check required\n                return None\n\n            csrf_token = _make_token(session_id)\n            # check incoming token\n            try:\n                request_csrf_token = request.POST['csrfmiddlewaretoken']\n            except KeyError:\n                return HttpResponseForbidden(_ERROR_MSG)\n\n            if request_csrf_token != csrf_token:\n                return HttpResponseForbidden(_ERROR_MSG)\n\n        return None\n",
+    "fixed_function": "    def process_view(self, request, callback, callback_args, callback_kwargs):\n        if request.method == 'POST':\n            if getattr(callback, 'csrf_exempt', False):\n                return None\n\n            try:\n                session_id = request.COOKIES[settings.SESSION_COOKIE_NAME]\n            except KeyError:\n                # No session, no check required\n                return None\n\n            csrf_token = _make_token(session_id)\n            # check incoming token\n            request_csrf_token = request.POST.get('csrfmiddlewaretoken', '')\n            if request_csrf_token == \"\":\n                # Fall back to X-CSRFToken, to make things easier for AJAX\n                request_csrf_token = request.META.get('HTTP_X_CSRFTOKEN', '')\n\n            if request_csrf_token == \"\":\n                return HttpResponseForbidden(_ERROR_MSG)\n\n            if request_csrf_token != csrf_token:\n                return HttpResponseForbidden(_ERROR_MSG)\n\n        return None\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-5j2h-h5hg-3wf8",
+    "cwe_ids": [
+      "CWE-352"
+    ],
+    "filename": "django/contrib/csrf/tests.py",
+    "vulnerable_function": "    def test_process_request_session_no_token_exempt_view(self):\n        \"\"\"\n        Check that if a session is present and no token, but the csrf_exempt\n        decorator has been applied to the view, the middleware lets it through\n        \"\"\"\n        req = self._get_POST_session_request()\n        req2 = CsrfMiddleware().process_view(req, csrf_exempt(self.get_view()), (), {})\n        self.assertEquals(None, req2)\n",
+    "fixed_function": "    def test_process_request_session_no_token_exempt_view(self):\n        \"\"\"\n        Check that if a session is present and no token, but the csrf_exempt\n        decorator has been applied to the view, the middleware lets it through\n        \"\"\"\n        req = self._get_POST_session_request()\n        req2 = CsrfMiddleware().process_view(req, csrf_exempt(self.get_view()), (), {})\n        self.assertEquals(None, req2)\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-7g9h-c88w-r7h2",
+    "cwe_ids": [
+      "CWE-22"
+    ],
+    "filename": "django/contrib/sessions/backends/file.py",
+    "vulnerable_function": "    def __init__(self, session_key=None):\n        self.storage_path = getattr(settings, \"SESSION_FILE_PATH\", None)\n        if not self.storage_path:\n            self.storage_path = tempfile.gettempdir()\n\n        # Make sure the storage path is valid.\n        if not os.path.isdir(self.storage_path):\n            raise ImproperlyConfigured(\n                \"The session storage path %r doesn't exist. Please set your\"\n                \" SESSION_FILE_PATH setting to an existing directory in which\"\n                \" Django can store session data.\" % self.storage_path)\n\n        self.file_prefix = settings.SESSION_COOKIE_NAME\n        super(SessionStore, self).__init__(session_key)\n",
+    "fixed_function": "    def __init__(self, session_key=None):\n        self.storage_path = getattr(settings, \"SESSION_FILE_PATH\", None)\n        if not self.storage_path:\n            self.storage_path = tempfile.gettempdir()\n\n        # Make sure the storage path is valid.\n        if not os.path.isdir(self.storage_path):\n            raise ImproperlyConfigured(\n                \"The session storage path %r doesn't exist. Please set your\"\n                \" SESSION_FILE_PATH setting to an existing directory in which\"\n                \" Django can store session data.\" % self.storage_path)\n\n        self.file_prefix = settings.SESSION_COOKIE_NAME\n        super(SessionStore, self).__init__(session_key)\n\n    VALID_KEY_CHARS = set(\"abcdef0123456789\")\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-7wph-fc4w-wqp2",
+    "cwe_ids": [
+      "CWE-20"
+    ],
+    "filename": "django/utils/http.py",
+    "vulnerable_function": "def http_date(epoch_seconds=None):\n    \"\"\"\n    Formats the time to match the RFC1123 date format as specified by HTTP\n    RFC2616 section 3.3.1.\n\n    Accepts a floating point number expressed in seconds since the epoch, in\n    UTC - such as that outputted by time.time(). If set to None, defaults to\n    the current time.\n\n    Outputs a string in the format 'Wdy, DD Mon YYYY HH:MM:SS GMT'.\n    \"\"\"\n    rfcdate = formatdate(epoch_seconds)\n    return '%s GMT' % rfcdate[:25]\n\n# Base 36 functions: useful for generating compact URLs\n",
+    "fixed_function": "def http_date(epoch_seconds=None):\n    \"\"\"\n    Formats the time to match the RFC1123 date format as specified by HTTP\n    RFC2616 section 3.3.1.\n\n    Accepts a floating point number expressed in seconds since the epoch, in\n    UTC - such as that outputted by time.time(). If set to None, defaults to\n    the current time.\n\n    Outputs a string in the format 'Wdy, DD Mon YYYY HH:MM:SS GMT'.\n    \"\"\"\n    rfcdate = formatdate(epoch_seconds)\n    return '%s GMT' % rfcdate[:25]\n\n# Base 36 functions: useful for generating compact URLs\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-8jxq-75rw-fhj9",
+    "cwe_ids": [
+      "CWE-94"
+    ],
+    "filename": "eve/io/mongo/parser.py",
+    "vulnerable_function": "    def visit_Call(self, node):\n        \"\"\" A couple function calls are supported: bson's ObjectId() and\n        datetime().\n        \"\"\"\n        if isinstance(node.func, ast.Name):\n            expr = None\n            if node.func.id == 'ObjectId':\n                expr = \"('\" + node.args[0].s + \"')\"\n            elif node.func.id == 'datetime':\n                values = []\n                for arg in node.args:\n                    values.append(str(arg.n))\n                expr = \"(\" + \", \".join(values) + \")\"\n            if expr:\n                self.current_value = eval(node.func.id + expr)\n",
+    "fixed_function": "    def visit_Call(self, node):\n        \"\"\" A couple function calls are supported: bson's ObjectId() and\n        datetime().\n        \"\"\"\n        if isinstance(node.func, ast.Name):\n            if node.func.id == 'ObjectId':\n                try:\n                    self.current_value = ObjectId(node.args[0].s)\n                except:\n                    pass\n            elif node.func.id == 'datetime':\n                values = []\n                for arg in node.args:\n                    values.append(arg.n)\n                try:\n                    self.current_value = datetime(*values)\n                except:\n                    pass\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-8m3r-rv5g-fcpq",
+    "cwe_ids": [
+      "CWE-79"
+    ],
+    "filename": "django/contrib/admin/widgets.py",
+    "vulnerable_function": "    def render(self, name, value, attrs=None):\n        output = []\n        if value and hasattr(value, \"url\"):\n            output.append('%s <a target=\"_blank\" href=\"%s\">%s</a> <br />%s ' % \\\n                (_('Currently:'), value.url, value, _('Change:')))\n        output.append(super(AdminFileWidget, self).render(name, value, attrs))\n        return mark_safe(u''.join(output))\n",
+    "fixed_function": "    def render(self, name, value, attrs=None):\n        output = []\n        if value and hasattr(value, \"url\"):\n            output.append('%s <a target=\"_blank\" href=\"%s\">%s</a> <br />%s ' % \\\n                (_('Currently:'), escape(value.url), escape(value), _('Change:')))\n        output.append(super(AdminFileWidget, self).render(name, value, attrs))\n        return mark_safe(u''.join(output))\n",
+    "label": "vulnerable"
+  },
+  {
+    "advisory_id": "GHSA-8m3r-rv5g-fcpq",
+    "cwe_ids": [
+      "CWE-79"
+    ],
+    "filename": "tests/regressiontests/admin_widgets/tests.py",
+    "vulnerable_function": "    def test_nonexistent_target_id(self):\n        band = models.Band.objects.create(name='Bogey Blues')\n        pk = band.pk\n        band.delete()\n        post_data = {\n            \"band\": u'%s' % pk,\n        }\n        # Try posting with a non-existent pk in a raw id field: this\n        # should result in an error message, not a server exception.\n        response = self.client.post('%s/admin_widgets/event/add/' % self.admin_root,\n            post_data)\n        self.assertContains(response,\n            'Select a valid choice. That choice is not one of the available choices.')",
+    "fixed_function": "    def test_nonexistent_target_id(self):\n        band = models.Band.objects.create(name='Bogey Blues')\n        pk = band.pk\n        band.delete()\n        post_data = {\n            \"band\": u'%s' % pk,\n        }\n        # Try posting with a non-existent pk in a raw id field: this\n        # should result in an error message, not a server exception.\n        response = self.client.post('%s/admin_widgets/event/add/' % self.admin_root,\n            post_data)\n        self.assertContains(response,\n            'Select a valid choice. That choice is not one of the available choices.')\n",
+    "label": "vulnerable"
+  }
+]
