@@ -1,0 +1,35 @@
+# File and Directory Paths
+data:
+  advisories_path: "github_advisories.json"
+  codesearchnet_dir: "data/python/python/final/jsonl/train"
+  processed_dataset_path: "massive_codesearchnet_dataset.pt"
+
+# Data Processing Parameters
+dataset:
+  max_safe_examples: 200000
+  max_nodes_per_graph: 100
+
+# Model Architecture
+model:
+  num_node_features: 11
+  hidden_channels: 128
+  num_classes: 2
+  dropout: 0.3
+  gcn_layers: 4
+  gat_heads: 8
+
+# Training Parameters
+training:
+  device: "auto"  # "auto" will use "cuda" if available, else "cpu"
+  num_epochs: 20
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.00005
+  patience: 5
+  test_split_size: 0.1
+  validation_split_size: 0.1 # This is 0.1 of the (1 - test_split_size) data
+  random_state: 42
+
+# Evaluation and Output
+output:
+  model_save_path: "massive_vulnerability_gnn_model.pt"
