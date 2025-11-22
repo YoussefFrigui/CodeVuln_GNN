@@ -14,6 +14,7 @@ The entire pipeline, from data processing to model training, is designed to be r
 - **Class Imbalance Handling**: Uses weighted loss to prioritize the detection of the minority (vulnerable) class.
 - **Reproducibility**: A single `config.yaml` file controls all parameters and paths.
 - **Progress Tracking**: Real-time `tqdm` progress bars for monitoring training.
+- **MLflow Integration**: Automatic experiment tracking, model versioning, and metrics logging.
 
 ## Project Structure
 
@@ -91,6 +92,22 @@ python scripts/02_train_model.py
 ```
 
 After training, the console will display the final test set metrics, and the trained model will be saved to the path specified in `output.model_save_path` in the config file.
+
+### Viewing Experiment Results with MLflow
+
+The project automatically tracks all training runs with MLflow. To view results:
+
+```bash
+python view_mlflow.py
+```
+
+Then open http://localhost:5000 in your browser to:
+- Compare different experiments
+- View training curves and metrics
+- Access logged models and artifacts
+- Track hyperparameter performance
+
+See `docs/MLFLOW_GUIDE.md` for detailed MLflow usage.
 
 ## Model Architecture
 

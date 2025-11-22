@@ -33,3 +33,12 @@ training:
 # Evaluation and Output
 output:
   model_save_path: "outputs/models/massive_vulnerability_gnn_model.pt"
+
+# MLflow Experiment Tracking
+mlflow:
+  enabled: true
+  experiment_name: "GNN_Vulnerability_Detection"
+  tracking_uri: "outputs/mlruns"  # Local directory for MLflow tracking
+  run_name_prefix: "gnn_vuln"  # Prefix for run names
+  log_models: true  # Whether to log models to MLflow
+  log_artifacts: true  # Whether to log confusion matrix and other artifacts

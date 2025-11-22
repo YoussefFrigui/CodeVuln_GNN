@@ -18,6 +18,10 @@ outputs/
 *.log
 # *.md  <-- Removed this so you can commit documentation
 
+# MLflow
+mlruns/
+mlartifacts/
+
 # IDE
 .vscode/
 .idea/

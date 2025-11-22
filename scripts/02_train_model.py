@@ -15,6 +15,8 @@ and handles the following responsibilities:
 
 import time
 from typing import Any, Dict, List, Tuple
+import os
+from datetime import datetime
 
 import torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -23,6 +25,14 @@ from torch.optim import Adam
 import torch.nn as nn
 from torch_geometric.data import DataLoader, Data
 from tqdm import tqdm
+
+try:
+    import mlflow
+    import mlflow.pytorch
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+    print("Warning: MLflow not available. Install with: pip install mlflow")
 
 from src.modeling.model import VulnerabilityGNN
 
@@ -38,10 +48,12 @@ class Trainer:
         device: str,
         config: Dict[str, Any],
         class_weights: List[float] = None,
+        mlflow_enabled: bool = False,
     ):
         self.model = model.to(device)
         self.device = device
         self.config = config
+        self.mlflow_enabled = mlflow_enabled and MLFLOW_AVAILABLE
         self.optimizer = Adam(
             model.parameters(),
             lr=config["training"]["learning_rate"],
@@ -130,19 +142,45 @@ class Trainer:
                 f"Val Loss: {val_loss:.4f}, Val F1: {val_metrics['f1']:.4f}"
             )
 
+            # Log metrics to MLflow
+            if self.mlflow_enabled:
+                mlflow.log_metrics({
+                    "train_loss": train_loss,
+                    "train_accuracy": train_acc,
+                    "val_loss": val_loss,
+                    "val_accuracy": val_metrics["accuracy"],
+                    "val_precision": val_metrics["precision"],
+                    "val_recall": val_metrics["recall"],
+                    "val_f1": val_metrics["f1"],
+                    "epoch_time_seconds": epoch_time,
+                }, step=epoch)
+
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
                 best_model_state = self.model.state_dict()
                 print(f"  -> New best model found (val_loss: {val_loss:.4f})")
+                
+                # Log best metrics to MLflow
+                if self.mlflow_enabled:
+                    mlflow.log_metrics({
+                        "best_val_loss": best_val_loss,
+                        "best_epoch": epoch + 1,
+                    })
             else:
                 patience_counter += 1
                 if patience_counter >= self.config["training"]["patience"]:
                     print(f"Early stopping at epoch {epoch+1}.")
+                    if self.mlflow_enabled:
+                        mlflow.log_metric("early_stopped_epoch", epoch + 1)
                     break
         
         total_time = time.time() - total_start_time
         print(f"\nTraining finished in {total_time/60:.2f} minutes.")
+        
+        # Log total training time
+        if self.mlflow_enabled:
+            mlflow.log_metric("total_training_time_minutes", total_time / 60)
 
         if best_model_state:
             self.model.load_state_dict(best_model_state)
@@ -157,13 +195,29 @@ def get_device(device_config: str) -> str:
 
 def train_model(config: Dict[str, Any]):
     """Main function to orchestrate the training process."""
-    device = get_device(config["training"]["device"])
-    print(f"Using device: {device}")
+    # Setup MLflow
+    mlflow_enabled = config.get("mlflow", {}).get("enabled", False) and MLFLOW_AVAILABLE
+    
+    if mlflow_enabled:
+        mlflow_config = config["mlflow"]
+        mlflow.set_tracking_uri(mlflow_config["tracking_uri"])
+        mlflow.set_experiment(mlflow_config["experiment_name"])
+        
+        # Start MLflow run
+        run_name = f"{mlflow_config['run_name_prefix']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        mlflow.start_run(run_name=run_name)
+        print(f"\n🔬 MLflow tracking enabled: {mlflow_config['tracking_uri']}")
+        print(f"📊 Experiment: {mlflow_config['experiment_name']}")
+        print(f"🏃 Run: {run_name}\n")
+    
+    try:
+        device = get_device(config["training"]["device"])
+        print(f"Using device: {device}")
 
-    # Load data
-    print("Loading processed dataset...")
-    dataset: List[Data] = torch.load(config["data"]["processed_dataset_path"])
-    print(f"Loaded {len(dataset)} graphs.")
+        # Load data
+        print("Loading processed dataset...")
+        dataset: List[Data] = torch.load(config["data"]["processed_dataset_path"])
+        print(f"Loaded {len(dataset)} graphs.")
 
     # Stratified split
     labels = [data.y.item() for data in dataset]
@@ -195,35 +249,114 @@ def train_model(config: Dict[str, Any]):
     num_vuln = len(train_dataset) - num_safe
     total = len(train_dataset)
     class_weights = [total / (2 * num_safe), total / (2 * num_vuln)]
+    
+    # Log parameters and dataset info to MLflow
+    if mlflow_enabled:
+        # Log all hyperparameters
+        mlflow.log_params({
+            # Model architecture
+            "num_node_features": config["model"]["num_node_features"],
+            "hidden_channels": config["model"]["hidden_channels"],
+            "num_classes": config["model"]["num_classes"],
+            "dropout": config["model"]["dropout"],
+            "gcn_layers": config["model"]["gcn_layers"],
+            "gat_heads": config["model"]["gat_heads"],
+            # Training parameters
+            "learning_rate": config["training"]["learning_rate"],
+            "weight_decay": config["training"]["weight_decay"],
+            "batch_size": config["training"]["batch_size"],
+            "num_epochs": config["training"]["num_epochs"],
+            "patience": config["training"]["patience"],
+            "device": device,
+            # Dataset parameters
+            "max_safe_examples": config["dataset"]["max_safe_examples"],
+            "max_nodes_per_graph": config["dataset"]["max_nodes_per_graph"],
+            "test_split_size": config["training"]["test_split_size"],
+            "validation_split_size": config["training"]["validation_split_size"],
+            "random_state": config["training"]["random_state"],
+        })
+        
+        # Log dataset statistics
+        mlflow.log_metrics({
+            "total_samples": len(dataset),
+            "train_samples": len(train_dataset),
+            "val_samples": len(val_dataset),
+            "test_samples": len(test_dataset),
+            "train_safe_samples": num_safe,
+            "train_vulnerable_samples": num_vuln,
+            "class_imbalance_ratio": num_safe / num_vuln if num_vuln > 0 else 0,
+            "class_weight_safe": class_weights[0],
+            "class_weight_vulnerable": class_weights[1],
+        })
+        
+        # Log tags for easier filtering
+        mlflow.set_tags({
+            "model_type": "GNN",
+            "architecture": "GCN+GAT",
+            "task": "vulnerability_detection",
+            "dataset": "github_advisories_codesearchnet",
+        })
 
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=config["training"]["batch_size"], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=config["training"]["batch_size"])
     test_loader = DataLoader(test_dataset, batch_size=config["training"]["batch_size"])
 
-    # Initialize model and trainer
-    model = VulnerabilityGNN(
-        num_node_features=config["model"]["num_node_features"],
-        hidden_channels=config["model"]["hidden_channels"],
-        num_classes=config["model"]["num_classes"],
-        dropout=config["model"]["dropout"],
-        gcn_layers=config["model"]["gcn_layers"],
-        gat_heads=config["model"]["gat_heads"],
-    )
-    trainer = Trainer(model, device, config, class_weights)
+        # Initialize model and trainer
+        model = VulnerabilityGNN(
+            num_node_features=config["model"]["num_node_features"],
+            hidden_channels=config["model"]["hidden_channels"],
+            num_classes=config["model"]["num_classes"],
+            dropout=config["model"]["dropout"],
+            gcn_layers=config["model"]["gcn_layers"],
+            gat_heads=config["model"]["gat_heads"],
+        )
+        trainer = Trainer(model, device, config, class_weights, mlflow_enabled=mlflow_enabled)
 
-    # Run training
-    trainer.run_training(train_loader, val_loader)
+        # Run training
+        trainer.run_training(train_loader, val_loader)
 
-    # Evaluate on test set
-    print("\nEvaluating on the test set...")
-    test_metrics = trainer.evaluate(test_loader)
-    print(f"Test Set Results: {test_metrics}")
+        # Evaluate on test set
+        print("\nEvaluating on the test set...")
+        test_metrics = trainer.evaluate(test_loader)
+        print(f"Test Set Results: {test_metrics}")
+        
+        # Log test metrics to MLflow
+        if mlflow_enabled:
+            mlflow.log_metrics({
+                "test_loss": test_metrics["loss"],
+                "test_accuracy": test_metrics["accuracy"],
+                "test_precision": test_metrics["precision"],
+                "test_recall": test_metrics["recall"],
+                "test_f1": test_metrics["f1"],
+            })
 
-    # Save the final model
-    model_save_path = config["output"]["model_save_path"]
-    torch.save(model.state_dict(), model_save_path)
-    print(f"Model saved to {model_save_path}")
+        # Save the final model
+        model_save_path = config["output"]["model_save_path"]
+        torch.save(model.state_dict(), model_save_path)
+        print(f"Model saved to {model_save_path}")
+        
+        # Log model to MLflow
+        if mlflow_enabled and config["mlflow"].get("log_models", True):
+            print("Logging model to MLflow...")
+            # Log PyTorch model
+            mlflow.pytorch.log_model(
+                pytorch_model=model,
+                artifact_path="model",
+                registered_model_name="VulnerabilityGNN",
+            )
+            # Also log the state dict as artifact
+            mlflow.log_artifact(model_save_path, artifact_path="model_weights")
+        
+        # Log config file as artifact
+        if mlflow_enabled and config["mlflow"].get("log_artifacts", True):
+            mlflow.log_artifact("configs/base_config.yaml", artifact_path="config")
+            
+    finally:
+        # End MLflow run
+        if mlflow_enabled:
+            mlflow.end_run()
+            print("\n✅ MLflow run completed")
 
 
 if __name__ == "__main__":
