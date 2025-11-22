@@ -2,9 +2,9 @@ import json
 import os
 import random
 
-VULNERABLE_FILE = 'extracted_snippets.json'
+VULNERABLE_FILE = 'outputs/datasets/extracted_snippets.json'
 SAFE_DIR = 'data/python/python/final/jsonl/train/'
-OUTPUT_FILE = 'labeled_dataset.json'
+OUTPUT_FILE = 'outputs/datasets/labeled_dataset.json'
 NUM_SAFE = 10000  # Number of safe examples to sample
 
 def load_vulnerable():

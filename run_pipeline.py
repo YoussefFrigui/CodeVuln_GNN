@@ -61,11 +61,11 @@ def check_dependencies():
 def check_data_files(step):
     """Check if required data files exist for the given step."""
     if step == 'preprocess':
-        required_files = ['labeled_dataset.json']
+        required_files = ['outputs/datasets/labeled_dataset.json']
     elif step in ['train', 'evaluate', 'all']:
-        required_files = ['processed_graphs.pt', 'data_splits.pt']
+        required_files = ['outputs/datasets/processed_graphs.pt', 'outputs/datasets/data_splits.pt']
         if step == 'evaluate':
-            required_files.append('vulnerability_gnn_model.pt')
+            required_files.append('outputs/models/vulnerability_gnn_model.pt')
     else:
         required_files = []
 
@@ -137,8 +137,8 @@ def main():
         print(f"\n{'='*50}")
         print("🎉 Pipeline completed successfully!")
         print("Check the generated files:")
-        print("  - processed_graphs.pt (preprocessed data)")
-        print("  - vulnerability_gnn_model.pt (trained model)")
+        print("  - outputs/datasets/processed_graphs.pt (preprocessed data)")
+        print("  - outputs/models/vulnerability_gnn_model.pt (trained model)")
         print("  - confusion_matrix.png (evaluation plot)")
         print(f"{'='*50}")
         return 0

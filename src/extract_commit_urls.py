@@ -1,8 +1,8 @@
 import json
 import re
 
-INPUT_FILE = 'python_advisories.json'
-OUTPUT_FILE = 'python_advisories_with_commits.json'
+INPUT_FILE = 'outputs/datasets/python_advisories.json'
+OUTPUT_FILE = 'outputs/datasets/python_advisories_with_commits.json'
 
 def find_commit_url(advisory):
     commit_urls = []

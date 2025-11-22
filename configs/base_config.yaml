@@ -1,8 +1,8 @@
 # File and Directory Paths
 data:
-  advisories_path: "github_advisories.json"
+  advisories_path: "outputs/datasets/python_advisories.json"
   codesearchnet_dir: "data/python/python/final/jsonl/train"
-  processed_dataset_path: "massive_codesearchnet_dataset.pt"
+  processed_dataset_path: "outputs/datasets/massive_codesearchnet_dataset.pt"
 
 # Data Processing Parameters
 dataset:
@@ -32,4 +32,4 @@ training:
 
 # Evaluation and Output
 output:
-  model_save_path: "massive_vulnerability_gnn_model.pt"
+  model_save_path: "outputs/models/massive_vulnerability_gnn_model.pt"

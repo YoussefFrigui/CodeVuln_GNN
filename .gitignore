@@ -14,11 +14,8 @@ venv.bak/
 
 # Data, Models & Logs
 data/
-*.pt
-*.json
-*.jsonl
+outputs/
 *.log
-*.png
 # *.md  <-- Removed this so you can commit documentation
 
 # IDE

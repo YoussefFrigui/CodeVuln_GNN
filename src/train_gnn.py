@@ -149,8 +149,8 @@ def main():
 
     # Load processed data and splits
     try:
-        processed_data = torch.load('processed_graphs.pt', weights_only=False)
-        data_splits = torch.load('data_splits.pt', weights_only=False)
+        processed_data = torch.load('outputs/datasets/processed_graphs.pt', weights_only=False)
+        data_splits = torch.load('outputs/datasets/data_splits.pt', weights_only=False)
         train_data = data_splits['train_data']
         val_data = data_splits['val_data']
         test_data = data_splits['test_data']
@@ -188,8 +188,8 @@ def main():
     print(f"F1-Score: {test_f1:.4f}")
 
     # Save trained model
-    torch.save(trained_model.state_dict(), 'vulnerability_gnn_model.pt')
-    print("Model saved to vulnerability_gnn_model.pt")
+    torch.save(trained_model.state_dict(), 'outputs/models/vulnerability_gnn_model.pt')
+    print("Model saved to outputs/models/vulnerability_gnn_model.pt")
 
 if __name__ == '__main__':
     main()

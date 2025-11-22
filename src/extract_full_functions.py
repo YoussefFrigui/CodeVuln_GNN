@@ -3,8 +3,8 @@ import re
 import requests
 import os
 
-INPUT_FILE = 'commit_data_results.json'
-OUTPUT_FILE = 'extracted_full_functions.json'
+INPUT_FILE = 'outputs/results/commit_data_results.json'
+OUTPUT_FILE = 'outputs/datasets/extracted_full_functions.json'
 GITHUB_TOKEN = os.environ.get('GITHUB_PAT')
 HEADERS = {'Authorization': f'token {GITHUB_TOKEN}'}
 

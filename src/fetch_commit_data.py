@@ -3,8 +3,8 @@ import json
 import re
 import requests
 
-INPUT_FILE = 'python_advisories_with_commits.json'
-OUTPUT_FILE = 'commit_data_results.json'
+INPUT_FILE = 'outputs/datasets/python_advisories_with_commits.json'
+OUTPUT_FILE = 'outputs/results/commit_data_results.json'
 GITHUB_TOKEN = os.environ.get('GITHUB_PAT')
 HEADERS = {'Authorization': f'token {GITHUB_TOKEN}'}
 

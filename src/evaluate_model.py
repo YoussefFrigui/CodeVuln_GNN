@@ -5,13 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def load_model_and_data(model_path='vulnerability_gnn_model.pt', data_path='data_splits.pt'):
+def load_model_and_data(model_path='outputs/models/vulnerability_gnn_model.pt', data_path='outputs/datasets/data_splits.pt'):
     """Load trained model and test data."""
     # Load model
     from train_gnn import VulnerabilityGNN  # Import the model class
 
     # Get number of features (this should match training)
-    processed_data = torch.load('processed_graphs.pt', weights_only=False)
+    processed_data = torch.load('outputs/datasets/processed_graphs.pt', weights_only=False)
     num_node_features = processed_data[0].x.shape[1]
 
     model = VulnerabilityGNN(num_node_features=num_node_features)
@@ -78,7 +78,7 @@ def print_evaluation_report(y_true, y_pred, y_prob):
 
     return cm
 
-def plot_confusion_matrix(cm, save_path='confusion_matrix.png'):
+def plot_confusion_matrix(cm, save_path='outputs/results/confusion_matrix.png'):
     """Plot and save confusion matrix."""
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',

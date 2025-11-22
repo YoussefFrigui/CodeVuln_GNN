@@ -20,6 +20,7 @@ import torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from torch.optim import Adam
+import torch.nn as nn
 from torch_geometric.data import DataLoader, Data
 from tqdm import tqdm
 

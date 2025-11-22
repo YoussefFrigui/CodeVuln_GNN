@@ -3,7 +3,7 @@ import json
 from glob import glob
 
 ADVISORY_PATH = r'data/advisory-database/advisories/github-reviewed/'
-OUTPUT_FILE = 'python_advisories.json'
+OUTPUT_FILE = 'outputs/datasets/python_advisories.json'
 
 def find_python_advisories(advisory_path, max_files=None):
     python_advisories = []

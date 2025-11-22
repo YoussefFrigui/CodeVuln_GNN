@@ -162,7 +162,7 @@ def create_balanced_dataset(vulnerable_examples, safe_examples, target_safe_rati
 
     return combined_dataset
 
-def save_expanded_dataset(dataset, output_file='expanded_labeled_dataset.json'):
+def save_expanded_dataset(dataset, output_file='outputs/datasets/expanded_labeled_dataset.json'):
     """Save the expanded dataset."""
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(dataset, f, indent=2, ensure_ascii=False)
@@ -176,7 +176,7 @@ def main():
 
     # Load existing data
     print("Loading existing data...")
-    advisories_data = load_json_file('python_advisories.json')
+    advisories_data = load_json_file('outputs/datasets/python_advisories.json')
     print(f"Loaded {len(advisories_data)} advisories")
 
     # Extract vulnerable examples from all advisories

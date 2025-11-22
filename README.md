@@ -22,7 +22,13 @@ The entire pipeline, from data processing to model training, is designed to be r
 ├── configs/
 │   └── base_config.yaml      # Central configuration for all parameters
 ├── data/
-│   └── ...                   # Raw data (managed by user)
+│   └── ...                   # Raw data (advisory database, CodeSearchNet)
+├── docs/
+│   └── ...                   # Project documentation and progress reports
+├── outputs/
+│   ├── datasets/             # Generated datasets (.pt, .json files)
+│   ├── models/               # Trained model weights
+│   └── results/              # Evaluation results and visualizations
 ├── scripts/
 │   ├── 01_create_dataset.py  # Runnable script to process data
 │   └── 02_train_model.py     # Runnable script to train the model
@@ -31,7 +37,8 @@ The entire pipeline, from data processing to model training, is designed to be r
 │   └── modeling/             # GNN model definition
 ├── .gitignore
 ├── README.md
-└── requirements.txt
+├── requirements.txt
+└── run_pipeline.py           # Main entry point for the pipeline
 ```
 
 ## Getting Started
