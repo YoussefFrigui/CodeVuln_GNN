@@ -16,6 +16,8 @@ and handles the following responsibilities:
 import time
 from typing import Any, Dict, List, Tuple
 import os
+import sys
+from pathlib import Path
 from datetime import datetime
 
 import torch
@@ -34,7 +36,9 @@ except ImportError:
     MLFLOW_AVAILABLE = False
     print("Warning: MLflow not available. Install with: pip install mlflow")
 
-from src.modeling.model import VulnerabilityGNN
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+from modeling.model import VulnerabilityGNN
 
 
 class Trainer:
@@ -216,91 +220,91 @@ def train_model(config: Dict[str, Any]):
 
         # Load data
         print("Loading processed dataset...")
-        dataset: List[Data] = torch.load(config["data"]["processed_dataset_path"])
+        dataset: List[Data] = torch.load(config["data"]["processed_dataset_path"], weights_only=False)
         print(f"Loaded {len(dataset)} graphs.")
 
-    # Stratified split
-    labels = [data.y.item() for data in dataset]
-    train_val_indices, test_indices = train_test_split(
-        range(len(dataset)),
-        test_size=config["training"]["test_split_size"],
-        stratify=labels,
-        random_state=config["training"]["random_state"],
-    )
-    
-    train_val_dataset = [dataset[i] for i in train_val_indices]
-    train_val_labels = [labels[i] for i in train_val_indices]
-    test_dataset = [dataset[i] for i in test_indices]
-
-    train_indices, val_indices = train_test_split(
-        range(len(train_val_dataset)),
-        test_size=config["training"]["validation_split_size"],
-        stratify=train_val_labels,
-        random_state=config["training"]["random_state"],
-    )
-
-    train_dataset = [train_val_dataset[i] for i in train_indices]
-    val_dataset = [train_val_dataset[i] for i in val_indices]
-
-    print(f"Dataset split: Train={len(train_dataset)}, Val={len(val_dataset)}, Test={len(test_dataset)}")
-
-    # Calculate class weights
-    num_safe = sum(1 for data in train_dataset if data.y.item() == 0)
-    num_vuln = len(train_dataset) - num_safe
-    total = len(train_dataset)
-    class_weights = [total / (2 * num_safe), total / (2 * num_vuln)]
-    
-    # Log parameters and dataset info to MLflow
-    if mlflow_enabled:
-        # Log all hyperparameters
-        mlflow.log_params({
-            # Model architecture
-            "num_node_features": config["model"]["num_node_features"],
-            "hidden_channels": config["model"]["hidden_channels"],
-            "num_classes": config["model"]["num_classes"],
-            "dropout": config["model"]["dropout"],
-            "gcn_layers": config["model"]["gcn_layers"],
-            "gat_heads": config["model"]["gat_heads"],
-            # Training parameters
-            "learning_rate": config["training"]["learning_rate"],
-            "weight_decay": config["training"]["weight_decay"],
-            "batch_size": config["training"]["batch_size"],
-            "num_epochs": config["training"]["num_epochs"],
-            "patience": config["training"]["patience"],
-            "device": device,
-            # Dataset parameters
-            "max_safe_examples": config["dataset"]["max_safe_examples"],
-            "max_nodes_per_graph": config["dataset"]["max_nodes_per_graph"],
-            "test_split_size": config["training"]["test_split_size"],
-            "validation_split_size": config["training"]["validation_split_size"],
-            "random_state": config["training"]["random_state"],
-        })
+        # Stratified split
+        labels = [data.y.item() for data in dataset]
+        train_val_indices, test_indices = train_test_split(
+            range(len(dataset)),
+            test_size=config["training"]["test_split_size"],
+            stratify=labels,
+            random_state=config["training"]["random_state"],
+        )
         
-        # Log dataset statistics
-        mlflow.log_metrics({
-            "total_samples": len(dataset),
-            "train_samples": len(train_dataset),
-            "val_samples": len(val_dataset),
-            "test_samples": len(test_dataset),
-            "train_safe_samples": num_safe,
-            "train_vulnerable_samples": num_vuln,
-            "class_imbalance_ratio": num_safe / num_vuln if num_vuln > 0 else 0,
-            "class_weight_safe": class_weights[0],
-            "class_weight_vulnerable": class_weights[1],
-        })
-        
-        # Log tags for easier filtering
-        mlflow.set_tags({
-            "model_type": "GNN",
-            "architecture": "GCN+GAT",
-            "task": "vulnerability_detection",
-            "dataset": "github_advisories_codesearchnet",
-        })
+        train_val_dataset = [dataset[i] for i in train_val_indices]
+        train_val_labels = [labels[i] for i in train_val_indices]
+        test_dataset = [dataset[i] for i in test_indices]
 
-    # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=config["training"]["batch_size"], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config["training"]["batch_size"])
-    test_loader = DataLoader(test_dataset, batch_size=config["training"]["batch_size"])
+        train_indices, val_indices = train_test_split(
+            range(len(train_val_dataset)),
+            test_size=config["training"]["validation_split_size"],
+            stratify=train_val_labels,
+            random_state=config["training"]["random_state"],
+        )
+
+        train_dataset = [train_val_dataset[i] for i in train_indices]
+        val_dataset = [train_val_dataset[i] for i in val_indices]
+
+        print(f"Dataset split: Train={len(train_dataset)}, Val={len(val_dataset)}, Test={len(test_dataset)}")
+
+        # Calculate class weights
+        num_safe = sum(1 for data in train_dataset if data.y.item() == 0)
+        num_vuln = len(train_dataset) - num_safe
+        total = len(train_dataset)
+        class_weights = [total / (2 * num_safe), total / (2 * num_vuln)]
+        
+        # Log parameters and dataset info to MLflow
+        if mlflow_enabled:
+            # Log all hyperparameters
+            mlflow.log_params({
+                # Model architecture
+                "num_node_features": config["model"]["num_node_features"],
+                "hidden_channels": config["model"]["hidden_channels"],
+                "num_classes": config["model"]["num_classes"],
+                "dropout": config["model"]["dropout"],
+                "gcn_layers": config["model"]["gcn_layers"],
+                "gat_heads": config["model"]["gat_heads"],
+                # Training parameters
+                "learning_rate": config["training"]["learning_rate"],
+                "weight_decay": config["training"]["weight_decay"],
+                "batch_size": config["training"]["batch_size"],
+                "num_epochs": config["training"]["num_epochs"],
+                "patience": config["training"]["patience"],
+                "device": device,
+                # Dataset parameters
+                "max_safe_examples": config["dataset"]["max_safe_examples"],
+                "max_nodes_per_graph": config["dataset"]["max_nodes_per_graph"],
+                "test_split_size": config["training"]["test_split_size"],
+                "validation_split_size": config["training"]["validation_split_size"],
+                "random_state": config["training"]["random_state"],
+            })
+            
+            # Log dataset statistics
+            mlflow.log_metrics({
+                "total_samples": len(dataset),
+                "train_samples": len(train_dataset),
+                "val_samples": len(val_dataset),
+                "test_samples": len(test_dataset),
+                "train_safe_samples": num_safe,
+                "train_vulnerable_samples": num_vuln,
+                "class_imbalance_ratio": num_safe / num_vuln if num_vuln > 0 else 0,
+                "class_weight_safe": class_weights[0],
+                "class_weight_vulnerable": class_weights[1],
+            })
+            
+            # Log tags for easier filtering
+            mlflow.set_tags({
+                "model_type": "GNN",
+                "architecture": "GCN+GAT",
+                "task": "vulnerability_detection",
+                "dataset": "github_advisories_codesearchnet",
+            })
+
+        # Create DataLoaders
+        train_loader = DataLoader(train_dataset, batch_size=config["training"]["batch_size"], shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=config["training"]["batch_size"])
+        test_loader = DataLoader(test_dataset, batch_size=config["training"]["batch_size"])
 
         # Initialize model and trainer
         model = VulnerabilityGNN(

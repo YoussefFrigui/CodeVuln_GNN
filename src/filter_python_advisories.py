@@ -1,6 +1,7 @@
 import os
 import json
 from glob import glob
+from tqdm import tqdm
 
 ADVISORY_PATH = r'data/advisory-database/advisories/github-reviewed/'
 OUTPUT_FILE = 'outputs/datasets/python_advisories.json'
@@ -10,13 +11,11 @@ def find_python_advisories(advisory_path, max_files=None):
     json_files = glob(os.path.join(advisory_path, '**/*.json'), recursive=True)
     total_files = len(json_files)
     print(f"Scanning {total_files} advisory files...")
-    for idx, file_path in enumerate(json_files):
+    
+    # Use tqdm for progress tracking
+    files_to_process = json_files[:max_files] if max_files else json_files
+    for file_path in tqdm(files_to_process, desc="Scanning advisories", unit="file"):
         file_path = os.path.normpath(file_path)
-        if max_files is not None and idx >= max_files:
-            print(f"Early stopping after {max_files} files.")
-            break
-        if idx % 1000 == 0 and idx > 0:
-            print(f"Processed {idx}/{total_files} files...")
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 advisory = json.load(f)
@@ -24,7 +23,7 @@ def find_python_advisories(advisory_path, max_files=None):
                     if advisory['affected'][0].get('package', {}).get('ecosystem') == 'PyPI':
                         python_advisories.append(advisory)
         except json.JSONDecodeError:
-            print(f"Warning: Could not decode JSON from {file_path}")
+            tqdm.write(f"Warning: Could not decode JSON from {file_path}")
     return python_advisories
 
 if __name__ == '__main__':

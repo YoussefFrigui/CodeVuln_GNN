@@ -30,18 +30,19 @@ GNN_project/
 │
 ├── outputs/                    # All generated outputs (not tracked in Git)
 │   ├── datasets/              # Processed datasets
-│   │   ├── massive_codesearchnet_dataset.pt
+│   │   ├── final_graph_dataset.pt
 │   │   ├── processed_graphs.pt
 │   │   ├── data_splits.pt
 │   │   ├── python_advisories.json
 │   │   ├── expanded_labeled_dataset.json
 │   │   ├── extracted_full_functions.json
 │   │   ├── extracted_snippets.json
-│   │   └── labeled_dataset.json
+│   │   ├── processed_advisories_with_code.json
+│   │   ├── python_advisories.json
+│   │   └── data_splits.pt
 │   │
 │   ├── models/                # Trained model weights
-│   │   ├── massive_vulnerability_gnn_model.pt
-│   │   └── vulnerability_gnn_model.pt
+│   │   └── trained_gnn_model.pt
 │   │
 │   └── results/               # Evaluation results and visualizations
 │       ├── confusion_matrix.png
@@ -123,15 +124,13 @@ All generated files from the pipeline. Organized into three subdirectories:
 #### `/outputs/datasets`
 Processed datasets in various stages:
 - `python_advisories.json` - Filtered advisory data
-- `massive_codesearchnet_dataset.pt` - Full graph dataset
-- `processed_graphs.pt` - Legacy processed graphs
+- `final_graph_dataset.pt` - Full graph dataset
+- `processed_advisories_with_code.json` - Vulnerable code from commits
 - `data_splits.pt` - Train/val/test splits
-- Other intermediate JSON files
 
 #### `/outputs/models`
 Trained model checkpoints:
-- `massive_vulnerability_gnn_model.pt` - Latest model (200k+ samples)
-- `vulnerability_gnn_model.pt` - Previous/baseline model
+- `trained_gnn_model.pt` - Current trained model
 
 #### `/outputs/results`
 Evaluation outputs and visualizations:
@@ -195,8 +194,8 @@ with open('configs/base_config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 model_path = config['output']['model_save_path']
 
-# Bad
-model_path = 'massive_vulnerability_gnn_model.pt'  # Hardcoded!
+# Bad (don't do this!)
+model_path = 'trained_gnn_model.pt'  # Hardcoded, missing outputs/models/ prefix!
 ```
 
 ## Cleanup and Maintenance
@@ -216,8 +215,8 @@ Then regenerate as needed with `run_pipeline.py`.
 
 ### Checking Disk Space
 Dataset files can be large (200k+ graphs = several GB):
-- `massive_codesearchnet_dataset.pt`: ~2-4 GB
-- `massive_vulnerability_gnn_model.pt`: ~10-50 MB
+- `final_graph_dataset.pt`: ~1.2 GB
+- `trained_gnn_model.pt`: ~5 MB
 
 Monitor disk usage regularly if experimenting frequently.
 

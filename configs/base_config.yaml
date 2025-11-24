@@ -1,21 +1,53 @@
 # File and Directory Paths
 data:
-  advisories_path: "outputs/datasets/python_advisories.json"
+  # Path to processed advisories with actual vulnerable code extracted from GitHub commits
+  # This file is created by running: python run_pipeline.py --step preprocess
+  advisories_path: "outputs/datasets/processed_advisories_with_code.json"
   codesearchnet_dir: "data/python/python/final/jsonl/train"
-  processed_dataset_path: "outputs/datasets/massive_codesearchnet_dataset.pt"
+  processed_dataset_path: "outputs/datasets/final_graph_dataset.pt"
+  
+  # High-quality curated datasets (new!)
+  curated_dataset_path: "outputs/datasets/curated_vulnerabilities.json"
+  validated_dataset_path: "outputs/datasets/validated_vulnerabilities.json"
+  
+  # Data source configuration
+  sources:
+    use_curated_vulnerabilities: true  # Use high-quality curated data (recommended)
+    github_advisories: true
+    nvd: false  # Set to true and provide API key
+    synthetic: true
+    codesearchnet: true
 
 # Data Processing Parameters
 dataset:
-  max_safe_examples: 200000
+  # Reduce to balance dataset better with ~7,246 vulnerable examples
+  # Current ratio with 36,230: 1:5 (vulnerable:safe)
+  # This helps model learn vulnerable patterns better than 1:100 ratio
+  max_safe_examples: 20450  # Try 36230 (1:5), 14492 (1:2), or 7246 (1:1)
   max_nodes_per_graph: 100
+  
+  # Data quality settings
+  quality:
+    min_quality_score: 0.4  # Minimum quality score (0-1)
+    min_loc: 5  # Minimum lines of code
+    max_loc: 500  # Maximum lines of code
+    require_context: false  # Require full function context
+    validate_syntax: true  # Check Python syntax validity
+    
+  # Diversity settings
+  diversity:
+    max_per_cwe: 150  # Maximum examples per CWE type
+    balance_by_complexity: true  # Balance across complexity levels
+    include_synthetic: true  # Include synthetic vulnerabilities
+    synthetic_count: 200  # Number of synthetic examples to generate
 
 # Model Architecture
 model:
   num_node_features: 11
-  hidden_channels: 128
+  hidden_channels: 128  # Matches trained model
   num_classes: 2
   dropout: 0.3
-  gcn_layers: 4
+  gcn_layers: 4  # Matches trained model (has 4 layers)
   gat_heads: 8
 
 # Training Parameters
@@ -32,7 +64,7 @@ training:
 
 # Evaluation and Output
 output:
-  model_save_path: "outputs/models/massive_vulnerability_gnn_model.pt"
+  model_save_path: "outputs/models/trained_gnn_model.pt"
 
 # MLflow Experiment Tracking
 mlflow:

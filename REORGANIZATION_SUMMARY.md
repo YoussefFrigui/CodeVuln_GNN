@@ -27,24 +27,18 @@ All documentation and progress reports moved here:
 All generated files organized into subdirectories:
 
 **`outputs/datasets/`** - All dataset files:
-- `massive_codesearchnet_dataset.pt`
-- `processed_graphs.pt`
+- `final_graph_dataset.pt`
 - `data_splits.pt`
-- `data_loaders.pt`
 - `python_advisories.json`
-- `python_advisories_with_commits.json`
-- `expanded_labeled_dataset.json`
-- `extracted_full_functions.json`
-- `extracted_snippets.json`
-- `labeled_dataset.json`
+- `processed_advisories_with_code.json`
 
 **`outputs/models/`** - All trained models:
-- `massive_vulnerability_gnn_model.pt`
-- `vulnerability_gnn_model.pt`
+- `trained_gnn_model.pt`
 
 **`outputs/results/`** - Evaluation outputs:
 - `confusion_matrix.png`
 - `commit_data_results.json`
+- `python_advisories_with_commits.json`
 
 ### Code Changes
 
@@ -52,9 +46,9 @@ All file paths in code updated to reflect the new structure:
 
 1. **`configs/base_config.yaml`**
    - Updated all paths to use `outputs/` subdirectories
-   - `advisories_path`: `outputs/datasets/python_advisories.json`
-   - `processed_dataset_path`: `outputs/datasets/massive_codesearchnet_dataset.pt`
-   - `model_save_path`: `outputs/models/massive_vulnerability_gnn_model.pt`
+   - `advisories_path`: `outputs/datasets/processed_advisories_with_code.json`
+   - `processed_dataset_path`: `outputs/datasets/final_graph_dataset.pt`
+   - `model_save_path`: `outputs/models/trained_gnn_model.pt`
 
 2. **Updated Files:**
    - `scripts/01_create_dataset.py` - No hardcoded paths (uses config)

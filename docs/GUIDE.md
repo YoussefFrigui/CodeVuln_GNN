@@ -124,7 +124,7 @@ python run_pipeline.py
 ```
 
 This will create:
-- `massive_codesearchnet_dataset.pt` (~962 MB) - Processed training dataset
+- `final_graph_dataset.pt` (~962 MB) - Processed training dataset
 - `labeled_dataset.json` - Labeled vulnerability data
 - `python_advisories.json` - Filtered Python security advisories
 - `commit_data_results.json` - GitHub commit analysis
@@ -146,7 +146,7 @@ Key settings to verify/adjust:
 data:
   advisories_path: "github_advisories.json"  # Path to filtered Python advisories
   codesearchnet_dir: "data/python/python/final/jsonl/train"  # CodeSearchNet data location
-  processed_dataset_path: "massive_codesearchnet_dataset.pt"  # Output processed dataset
+  processed_dataset_path: "final_graph_dataset.pt"  # Output processed dataset
 
 dataset:
   max_safe_examples: 200000  # Number of safe code examples to use
@@ -201,8 +201,8 @@ python run_pipeline.py --step evaluate    # Evaluation only
 ```
 
 **Expected Outputs:**
-- `massive_codesearchnet_dataset.pt` - Processed graph dataset (~962 MB)
-- `massive_vulnerability_gnn_model.pt` - Trained model weights
+- `final_graph_dataset.pt` - Processed graph dataset (~962 MB)
+- `trained_gnn_model.pt` - Trained model weights
 - `confusion_matrix.png` - Evaluation visualization
 - Console output with training metrics and test set results
 

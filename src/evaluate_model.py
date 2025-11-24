@@ -4,18 +4,41 @@ from sklearn.metrics import classification_report, confusion_matrix
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
+import sys
+from pathlib import Path
 
-def load_model_and_data(model_path='outputs/models/vulnerability_gnn_model.pt', data_path='outputs/datasets/data_splits.pt'):
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+
+def load_model_and_data(model_path=None, data_path='outputs/datasets/data_splits.pt'):
     """Load trained model and test data."""
+    import yaml
+    
     # Load model
-    from train_gnn import VulnerabilityGNN  # Import the model class
+    from modeling.model import VulnerabilityGNN  # Import the model class
 
-    # Get number of features (this should match training)
-    processed_data = torch.load('outputs/datasets/processed_graphs.pt', weights_only=False)
-    num_node_features = processed_data[0].x.shape[1]
+    # Load config to get model parameters
+    with open('configs/base_config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Use model path from config if not provided
+    if model_path is None:
+        model_path = config["output"]["model_save_path"]
 
-    model = VulnerabilityGNN(num_node_features=num_node_features)
-    model.load_state_dict(torch.load(model_path))
+    # Initialize model with correct parameters
+    model = VulnerabilityGNN(
+        num_node_features=config["model"]["num_node_features"],
+        hidden_channels=config["model"]["hidden_channels"],
+        num_classes=config["model"]["num_classes"],
+        dropout=config["model"]["dropout"],
+        gcn_layers=config["model"]["gcn_layers"],
+        gat_heads=config["model"]["gat_heads"],
+    )
+    
+    # Load trained weights
+    print(f"Loading model from: {model_path}")
+    model.load_state_dict(torch.load(model_path, weights_only=False))
     model.eval()
 
     # Load data splits and create test loader
@@ -35,7 +58,7 @@ def evaluate_model(model, test_loader, device='cpu'):
     y_prob = []
 
     with torch.no_grad():
-        for data in test_loader:
+        for data in tqdm(test_loader, desc="Evaluating test set", unit="batch"):
             data = data.to(device)
             out = model(data.x, data.edge_index, data.batch)
 

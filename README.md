@@ -30,12 +30,15 @@ The entire pipeline, from data processing to model training, is designed to be r
 │   ├── datasets/             # Generated datasets (.pt, .json files)
 │   ├── models/               # Trained model weights
 │   └── results/              # Evaluation results and visualizations
-├── scripts/
-│   ├── 01_create_dataset.py  # Runnable script to process data
-│   └── 02_train_model.py     # Runnable script to train the model
 ├── src/
-│   ├── data_processing/      # Data loading and graph conversion logic
-│   └── modeling/             # GNN model definition
+│   ├── preprocess_advisories.py   # Extract vulnerable code from GitHub
+│   ├── create_dataset.py          # Convert code to graph dataset
+│   ├── train_model.py             # Train GNN model
+│   ├── evaluate_model.py          # Evaluate trained model
+│   ├── filter_python_advisories.py # Filter PyPI advisories
+│   ├── data_processing/           # Graph conversion utilities
+│   ├── modeling/                  # GNN model definition
+│   └── training/                  # Training utilities
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
@@ -77,18 +80,37 @@ Key settings to check:
 
 The pipeline is executed through the scripts in the `scripts/` directory.
 
+**Step 0: Preprocess GitHub Advisories (REQUIRED)**
+
+This script extracts actual vulnerable Python code from GitHub commits referenced in the Security Advisory database. It fetches commit data via the GitHub API and parses git diffs to extract vulnerable code snippets.
+
+```bash
+python src/preprocess_advisories.py
+```
+
+**Important:** Set the `GITHUB_PAT` environment variable with a GitHub Personal Access Token to increase rate limits from 60 to 5000 requests/hour:
+```bash
+# Windows (Command Prompt)
+set GITHUB_PAT=your_token_here
+
+# Windows (PowerShell)
+$env:GITHUB_PAT="your_token_here"
+```
+
+This will create `outputs/datasets/processed_advisories_with_code.json` containing vulnerable code examples.
+
 **Step 1: Create the Dataset**
 
-This script will process the raw advisory and CodeSearchNet data, convert code to graphs, and save a single `massive_codesearchnet_dataset.pt` file.
+This script will process the preprocessed advisories and CodeSearchNet data, convert code to graphs, and save a single `final_graph_dataset.pt` file.
 ```bash
-python scripts/01_create_dataset.py
+python src/create_dataset.py
 ```
 
 **Step 2: Train the Model**
 
-This script loads the processed dataset, splits it, calculates class weights, and runs the training and evaluation loop. The final trained model will be saved.
+This script loads the processed dataset, splits it, calculates class weights, and runs the training and evaluation loop. The final trained model will be saved with MLflow tracking enabled.
 ```bash
-python scripts/02_train_model.py
+python src/train_model.py
 ```
 
 After training, the console will display the final test set metrics, and the trained model will be saved to the path specified in `output.model_save_path` in the config file.

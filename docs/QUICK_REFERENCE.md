@@ -17,31 +17,12 @@ GNN_project/
 ├── commit_data_results.json             ❌ Result in root
 ├── data_loaders.pt                      ❌ Dataset in root
 ├── data_splits.pt                       ❌ Dataset in root
-├── expanded_labeled_dataset.json        ❌ Dataset in root
-├── extracted_full_functions.json        ❌ Dataset in root
-├── extracted_snippets.json              ❌ Dataset in root
-├── labeled_dataset.json                 ❌ Dataset in root
-├── massive_codesearchnet_dataset.pt     ❌ Dataset in root
-├── processed_graphs.pt                  ❌ Dataset in root
-├── python_advisories.json               ❌ Dataset in root
-├── python_advisories_with_commits.json  ❌ Dataset in root
-├── massive_vulnerability_gnn_model.pt   ❌ Model in root
-├── vulnerability_gnn_model.pt           ❌ Model in root
-├── configs/                             ✅ Good
-├── data/                                ✅ Good
-├── scripts/                             ✅ Good
-├── src/                                 ✅ Good
-├── README.md                            ✅ Good
-├── requirements.txt                     ✅ Good
-└── run_pipeline.py                      ✅ Good
-```
-
-**Problems:**
-- 20+ files in root directory
-- Mixed documentation, datasets, models, and results
-- Hard to find what you need
-- Confusing for new contributors
-- Poor Git hygiene
+**Problems (FIXED):**
+- All files now in organized subdirectories
+- Clear separation: data → `outputs/datasets/`, models → `outputs/models/`
+- Easy to navigate with logical structure
+- Clean root directory
+- Good Git hygiene with `.gitignore` for `outputs/`
 
 ---
 
@@ -67,22 +48,15 @@ GNN_project/
 │   └── steps_to_follow.md
 ├── outputs/                             ✅ All generated files
 │   ├── datasets/                        ✅ Processed data
-│   │   ├── massive_codesearchnet_dataset.pt
-│   │   ├── processed_graphs.pt
-│   │   ├── data_splits.pt
-│   │   ├── data_loaders.pt
 │   │   ├── python_advisories.json
-│   │   ├── python_advisories_with_commits.json
-│   │   ├── expanded_labeled_dataset.json
-│   │   ├── extracted_full_functions.json
-│   │   ├── extracted_snippets.json
-│   │   └── labeled_dataset.json
+│   │   ├── processed_advisories_with_code.json
+│   │   ├── final_graph_dataset.pt
+│   │   └── data_splits.pt
 │   ├── models/                          ✅ Trained models
-│   │   ├── massive_vulnerability_gnn_model.pt
-│   │   └── vulnerability_gnn_model.pt
+│   │   └── trained_gnn_model.pt
 │   └── results/                         ✅ Evaluation outputs
 │       ├── confusion_matrix.png
-│       └── commit_data_results.json
+│       └── python_advisories_with_commits.json
 ├── scripts/                             ✅ Main scripts
 │   ├── 01_create_dataset.py
 │   └── 02_train_model.py
@@ -205,21 +179,21 @@ import yaml
 with open('configs/base_config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 dataset_path = config['data']['processed_dataset_path']
-# Result: 'outputs/datasets/massive_codesearchnet_dataset.pt'
+# Result: 'outputs/datasets/final_graph_dataset.pt'
 
-# ❌ BAD - Hardcoded
-dataset_path = 'massive_codesearchnet_dataset.pt'
+# ❌ BAD - Hardcoded (don't do this!)
+dataset_path = 'final_graph_dataset.pt'
 ```
 
 ### In Config File
 ```yaml
 # All paths relative to project root
 data:
-  advisories_path: "outputs/datasets/python_advisories.json"
-  processed_dataset_path: "outputs/datasets/massive_codesearchnet_dataset.pt"
+  advisories_path: "outputs/datasets/processed_advisories_with_code.json"
+  processed_dataset_path: "outputs/datasets/final_graph_dataset.pt"
 
 output:
-  model_save_path: "outputs/models/massive_vulnerability_gnn_model.pt"
+  model_save_path: "outputs/models/trained_gnn_model.pt"
 ```
 
 ---

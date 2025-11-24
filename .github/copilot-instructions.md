@@ -67,7 +67,7 @@ python run_pipeline.py --step preprocess    # Data only
 python run_pipeline.py --step train         # Training only
 ```
 
-**NEVER** run scripts directly (`python scripts/01_create_dataset.py`) except for debugging. The orchestrator handles:
+**NEVER** run scripts directly (`python src/create_dataset.py`) except for debugging. The orchestrator handles:
 - Dependency checking (PyTorch, torch-geometric, networkx)
 - Data file validation (checks for required .pt and .json files)
 - Sequential execution with proper error propagation
@@ -86,7 +86,7 @@ The `code_to_pyg_graph()` function is the core transformation:
 ## Class Imbalance Handling (CRITICAL)
 
 With 1:50 vulnerable-to-safe ratio, raw training fails (model predicts "safe" for everything). Solutions implemented:
-- **Weighted Cross-Entropy Loss**: Calculated in `scripts/02_train_model.py` using `total/(2*class_count)` formula
+- **Weighted Cross-Entropy Loss**: Calculated in `src/train_model.py` using `total/(2*class_count)` formula
 - **Stratified Splitting**: Both `train_test_split()` calls use `stratify=labels` to maintain class ratios
 - **Result**: Vulnerable class receives ~26x higher loss weight
 
@@ -99,7 +99,7 @@ With 1:50 vulnerable-to-safe ratio, raw training fails (model predicts "safe" fo
    - Filters for `ecosystem: PyPI` advisories
    - Does NOT extract code yet
 
-2. **Graph Dataset Creation** (`scripts/01_create_dataset.py` → `massive_codesearchnet_dataset.pt`)
+2. **Graph Dataset Creation** (`src/create_dataset.py` → `final_graph_dataset.pt`)
    - Loads vulnerable code from processed advisories
    - Streams safe code from CodeSearchNet `.jsonl` files (uses `original_string` field)
    - Converts all to PyTorch Geometric graphs
@@ -107,7 +107,7 @@ With 1:50 vulnerable-to-safe ratio, raw training fails (model predicts "safe" fo
 
 ## Training Patterns
 
-**The Trainer class in `scripts/02_train_model.py`** follows this structure:
+**The Trainer class in `src/train_model.py`** follows this structure:
 - `train_epoch()`: Returns (loss, accuracy) for the training set
 - `evaluate()`: Returns dict with loss, accuracy, precision, recall, F1
 - `run_training()`: Main loop with early stopping (monitors validation loss, saves best model state)
@@ -118,11 +118,11 @@ With 1:50 vulnerable-to-safe ratio, raw training fails (model predicts "safe" fo
 
 ## File Naming Conventions
 
-- `massive_*.pt` = Full 200k+ dataset files
-- `processed_graphs.pt` = Converted graph dataset
-- `data_splits.pt` = Train/val/test splits (legacy - newer code uses inline splitting)
-- `vulnerability_gnn_model.pt` = Trained model weights
+- `final_graph_dataset.pt` = Complete PyTorch Geometric graph dataset
+- `data_splits.pt` = Train/val/test splits
+- `trained_gnn_model.pt` = Trained model weights
 - `*_advisories.json` = Advisory data (human-readable JSON)
+- `processed_advisories_with_code.json` = Vulnerable code extracted from commits
 
 ## Common Development Workflows
 
@@ -152,7 +152,7 @@ With 1:50 vulnerable-to-safe ratio, raw training fails (model predicts "safe" fo
 
 ## Progress Tracking System
 
-The training scripts use `tqdm` for real-time visibility (see `scripts/02_train_model.py`):
+The training scripts use `tqdm` for real-time visibility (see `src/train_model.py`):
 - Epoch-level: Outer loop shows epoch progress
 - Batch-level: `train_epoch()` and `evaluate()` have `tqdm(loader, desc="...")` 
 - Metrics displayed: `set_postfix({'loss': ..., 'acc': ...})`
@@ -178,8 +178,8 @@ Outputs confusion matrix PNG and prints classification metrics (accuracy, precis
 
 - **`src/modeling/model.py`**: Change GNN architecture (add layers, change pooling strategy)
 - **`src/data_processing/graph_utils.py`**: Modify feature extraction (e.g., add edge features, change node representation)
-- **`scripts/01_create_dataset.py`**: Alter data loading logic (e.g., use different CodeSearchNet fields)
-- **`scripts/02_train_model.py`**: Change training loop (e.g., add learning rate scheduling, modify loss function)
+- **`src/create_dataset.py`**: Alter data loading logic (e.g., use different CodeSearchNet fields)
+- **`src/train_model.py`**: Change training loop (e.g., add learning rate scheduling, modify loss function)
 
 **Do NOT modify** `run_pipeline.py` unless changing the orchestration logic itself.
 
@@ -217,7 +217,7 @@ Outputs confusion matrix PNG and prints classification metrics (accuracy, precis
 
 ### Problem: "Model predicts all safe (0% recall on vulnerable class)"
 **Diagnosis**: Class imbalance not handled
-**Solution**: Verify weighted loss calculation in `scripts/02_train_model.py` - should show weights like `[0.5, 26.0]`
+**Solution**: Verify weighted loss calculation in `src/train_model.py` - should show weights like `[0.5, 26.0]`
 
 ### Problem: "OOM (Out of Memory) during training"
 **Diagnosis**: Batch too large or graphs too complex

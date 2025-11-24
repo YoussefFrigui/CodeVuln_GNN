@@ -37,17 +37,16 @@
 
 #### **2. Code Quality & Readability Issues**
 -   **Magic Numbers and Hardcoded Paths:** These are rampant throughout the codebase, making it rigid and difficult to configure.
-    -   **Snippet from `scripts/01_create_dataset.py`:**
+    -   **FIXED - Now uses config:**
         ```python
-        # ...
-        DATASET_PATH = "massive_codesearchnet_dataset.pt"
-        # ...
-        if os.path.exists(DATASET_PATH):
-            print("Dataset already exists. Skipping.")
-            return
-        # ...
+        # All scripts now load from configs/base_config.yaml
+        with open('configs/base_config.yaml', 'r') as f:
+            config = yaml.safe_load(f)
+        
+        DATASET_PATH = config['data']['processed_dataset_path']
+        # Result: "outputs/datasets/final_graph_dataset.pt"
         ```
-        *Critique:* The path `"massive_codesearchnet_dataset.pt"` is hardcoded. This script cannot be reused for any other dataset or path without modifying the code.
+        *Status:* No more hardcoded paths. All paths configurable via YAML.
 
 -   **High Cyclomatic Complexity / Deep Nesting:** Logic is often deeply nested, making it hard to read and test.
     -   **Snippet from `src/create_labeled_dataset.py`:**
