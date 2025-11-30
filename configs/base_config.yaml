@@ -20,10 +20,10 @@ data:
 
 # Data Processing Parameters
 dataset:
-  # Reduce to balance dataset better with ~7,246 vulnerable examples
+  # Reduce to balance dataset better with vulnerable examples
   # Current ratio with 36,230: 1:5 (vulnerable:safe)
   # This helps model learn vulnerable patterns better than 1:100 ratio
-  max_safe_examples: 20450  # Try 36230 (1:5), 14492 (1:2), or 7246 (1:1)
+  max_safe_examples: 20450  #  20450 (1:5)
   max_nodes_per_graph: 100
   
   # Data quality settings
