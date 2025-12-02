@@ -20,10 +20,9 @@ data:
 
 # Data Processing Parameters
 dataset:
-  # Reduce to balance dataset better with vulnerable examples
-  # Current ratio with 36,230: 1:5 (vulnerable:safe)
-  # This helps model learn vulnerable patterns better than 1:100 ratio
-  max_safe_examples: 20450  #  20450 (1:5)
+  # With ~7000 vulnerable examples, use more safe examples for balance
+  # Ratio: 1:3 (vulnerable:safe) for better learning
+  max_safe_examples: 21000  # ~7000 * 3 = 21000 for 1:3 ratio
   max_nodes_per_graph: 100
   
   # Data quality settings
@@ -78,3 +77,12 @@ mlflow:
   run_name_prefix: "gnn_vuln"  # Prefix for run names
   log_models: true  # Whether to log models to MLflow
   log_artifacts: true  # Whether to log confusion matrix and other artifacts
+
+# LLM Explainability (Google Gemini)
+llm:
+  enabled: true
+  provider: "google"  # Currently only Google Gemini is supported
+  model: "gemini-2.0-flash"  # Fast model for explanations
+  # api_key: ""  # Set via GEMINI_API_KEY environment variable (recommended)
+  temperature: 0.3  # Lower = more focused explanations
+  max_tokens: 1500  # Max tokens for explanation

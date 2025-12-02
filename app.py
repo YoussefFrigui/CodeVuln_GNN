@@ -4,6 +4,11 @@
 A Streamlit application for detecting security vulnerabilities in Python code
 using Graph Neural Networks (GNN) trained on AST representations.
 
+Features:
+- GNN-based vulnerability detection
+- LLM-powered explainability (Google Gemini)
+- RAG-like architecture for detailed explanations
+
 Usage: streamlit run app.py
 """
 
@@ -25,6 +30,14 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.modeling.model import VulnerabilityGNN
 from src.data_processing.graph_utils import code_to_pyg_graph, NODE_TYPES
+
+# Import LLM explainer
+try:
+    from src.explainability.llm_explainer import VulnerabilityExplainer
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+    print("Warning: LLM explainer not available")
 
 
 # ============================================================================
@@ -62,6 +75,19 @@ def load_model():
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None, None, False
+
+
+def get_llm_explainer(api_key: str = None):
+    """Get LLM explainer instance."""
+    if not LLM_AVAILABLE:
+        return None
+    
+    # Use provided key or check environment
+    key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not key:
+        return None
+    
+    return VulnerabilityExplainer(api_key=key)
 
 
 def analyze_code(code: str, model, config) -> dict:
@@ -320,9 +346,41 @@ def main():
             help="Lower values = more sensitive (catches more vulnerabilities but may have false positives). Higher values = more conservative."
         )
         st.caption(f"Current: Flag as vulnerable if score > {detection_threshold:.0%}")
+        
+        st.divider()
+        
+        # LLM Explainability Settings
+        st.header("🤖 AI Explainability")
+        
+        enable_llm = st.checkbox(
+            "Enable LLM Explanations",
+            value=True,
+            help="Use Google Gemini to generate detailed explanations"
+        )
+        
+        if enable_llm:
+            # Check for existing API key in environment
+            env_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            
+            if env_api_key:
+                st.success("✅ API key found in environment")
+                api_key = env_api_key
+            else:
+                api_key = st.text_input(
+                    "Gemini API Key",
+                    type="password",
+                    help="Get your API key from https://makersuite.google.com/app/apikey"
+                )
+            
+            if api_key:
+                st.session_state.gemini_api_key = api_key
+            
+            if not LLM_AVAILABLE:
+                st.warning("⚠️ Install google-genai: `pip install google-genai`")
     
     # Store threshold in session state
     st.session_state.detection_threshold = detection_threshold
+    st.session_state.enable_llm = enable_llm
     
     # Main content
     tab1, tab2, tab3 = st.tabs(["🔍 Scan Code", "📚 Examples", "📈 Batch Analysis"])
@@ -453,6 +511,52 @@ def main():
                                                       key=lambda x: x[1], reverse=True)[:10]
                                 for node_type, count in sorted_counts:
                                     st.write(f"- {node_type}: {count}")
+                        
+                        # LLM Explanation Section
+                        st.divider()
+                        st.subheader("🤖 AI-Powered Explanation")
+                        
+                        if st.session_state.get("enable_llm", True) and LLM_AVAILABLE:
+                            api_key = st.session_state.get("gemini_api_key")
+                            
+                            if api_key:
+                                with st.spinner("🔮 Generating detailed explanation..."):
+                                    explainer = get_llm_explainer(api_key)
+                                    if explainer:
+                                        explanation_result = explainer.explain(
+                                            code=code_input,
+                                            gnn_result={
+                                                "is_vulnerable": result["is_vulnerable"],
+                                                "vulnerability_score": result["vulnerability_score"],
+                                            }
+                                        )
+                                        
+                                        if explanation_result.get("success"):
+                                            st.markdown(explanation_result["explanation"])
+                                            
+                                            # Show detected patterns
+                                            with st.expander("🔍 Detected Patterns (RAG Context)"):
+                                                ctx = explanation_result.get("context", {})
+                                                if ctx.get("dangerous_patterns"):
+                                                    st.write("**Vulnerability Patterns:**")
+                                                    for p in ctx["dangerous_patterns"]:
+                                                        st.write(f"- {p['type']}: {p['description']}")
+                                                if ctx.get("user_inputs"):
+                                                    st.write(f"**User Input Sources:** {', '.join(ctx['user_inputs'])}")
+                                                if ctx.get("string_operations"):
+                                                    st.write(f"**String Operations:** {', '.join(ctx['string_operations'])}")
+                                        else:
+                                            # Show fallback explanation
+                                            st.warning("⚠️ LLM explanation unavailable. Showing pattern-based analysis:")
+                                            st.markdown(explanation_result.get("fallback_explanation", "No explanation available."))
+                                    else:
+                                        st.warning("Could not initialize explainer.")
+                            else:
+                                st.info("💡 Add your Gemini API key in the sidebar to get AI-powered explanations.")
+                        elif not LLM_AVAILABLE:
+                            st.info("💡 Install `google-genai` package to enable AI explanations.")
+                        else:
+                            st.info("💡 Enable LLM explanations in the sidebar for detailed analysis.")
             
             elif analyze_button:
                 st.warning("⚠️ Please enter some code to analyze.")

@@ -32,26 +32,54 @@ from data_processing.graph_utils import code_to_pyg_graph
 def load_vulnerable_examples(advisories_path: str, use_curated: bool = True, 
                             curated_path: str = None) -> List[Dict[str, Any]]:
     """
-    Loads vulnerable code examples from advisories or curated dataset.
+    Loads vulnerable code examples from BOTH raw advisories AND curated dataset.
     
-    This function can load from two sources:
-    1. Curated dataset (default) - High-quality, validated examples from data curation
-    2. Raw processed advisories - Legacy format for backward compatibility
+    This function combines data from multiple sources for maximum coverage:
+    1. Raw processed advisories - All 7000+ examples from GitHub advisories
+    2. Curated dataset (if available) - Additional validated, high-quality examples
 
     Args:
-        advisories_path: Path to the processed advisories JSON file (legacy).
-        use_curated: If True, attempts to load from curated dataset first.
+        advisories_path: Path to the processed advisories JSON file.
+        use_curated: If True, also loads from curated dataset.
         curated_path: Path to curated/validated dataset JSON file.
 
     Returns:
-        A list of dictionaries, where each dictionary represents a vulnerable
-        code snippet with actual Python code.
+        A list of dictionaries with vulnerable code snippets.
     """
     vulnerable_examples = []
+    seen_codes = set()  # Deduplicate by code hash
     
-    # Try loading from curated dataset first (higher quality)
+    # ALWAYS load from raw processed advisories first (main source - 7000+ examples)
+    if os.path.exists(advisories_path):
+        print(f"Loading vulnerable examples from {advisories_path}...")
+        
+        with open(advisories_path, "r", encoding="utf-8") as f:
+            advisories = json.load(f)
+        
+        for advisory in advisories:
+            if "vulnerable_code" in advisory and advisory["vulnerable_code"]:
+                code = advisory["vulnerable_code"].strip()
+                code_hash = hash(code)
+                
+                # Filter: code > 20 chars and not duplicate
+                if len(code) > 20 and code_hash not in seen_codes:
+                    seen_codes.add(code_hash)
+                    vulnerable_examples.append({
+                        "code": code,
+                        "label": 1,  # 1 = vulnerable
+                        "advisory_id": advisory.get("advisory_id", advisory.get("id", "")),
+                        "filename": advisory.get("filename", ""),
+                        "cwe_id": advisory.get("cwe_id", ""),
+                        "severity": advisory.get("severity", "MEDIUM"),
+                        "quality_score": 0.6,  # Default for raw data
+                        "source": "github_advisory"
+                    })
+        
+        print(f"✓ Loaded {len(vulnerable_examples)} examples from raw advisories")
+    
+    # ALSO load from curated/validated dataset if available (adds extra quality examples)
     if use_curated and curated_path and os.path.exists(curated_path):
-        print(f"Loading HIGH-QUALITY curated vulnerable examples from {curated_path}...")
+        print(f"Loading additional curated examples from {curated_path}...")
         
         with open(curated_path, "r", encoding="utf-8") as f:
             curated_data = json.load(f)
@@ -59,77 +87,42 @@ def load_vulnerable_examples(advisories_path: str, use_curated: bool = True,
         # Handle new curated format with metadata
         if "examples" in curated_data:
             examples = curated_data["examples"]
-            stats = curated_data.get("statistics", {})
+            stats = curated_data.get("validation_stats", curated_data.get("statistics", {}))
             
-            print(f"📊 Curated Dataset Statistics:")
-            print(f"   Total examples: {stats.get('total_examples', len(examples))}")
-            print(f"   Avg quality score: {stats.get('avg_quality_score', 0):.3f}")
-            print(f"   Examples with fixes: {stats.get('has_fixes', 0)}")
-            print(f"   Unique CWE types: {stats.get('cwe_types', 0)}")
+            if stats:
+                print(f"📊 Curated Dataset Statistics:")
+                print(f"   Total: {stats.get('total_examples', stats.get('total', len(examples)))}")
+                print(f"   Valid: {stats.get('valid_examples', stats.get('valid', len(examples)))}")
         else:
-            examples = curated_data
+            examples = curated_data if isinstance(curated_data, list) else []
         
+        curated_added = 0
         for example in examples:
             code = example.get("vulnerable_code", "").strip()
+            code_hash = hash(code)
             
-            if len(code) > 20:
+            if len(code) > 20 and code_hash not in seen_codes:
+                seen_codes.add(code_hash)
                 vulnerable_examples.append({
                     "code": code,
-                    "label": 1,  # 1 = vulnerable
+                    "label": 1,
                     "advisory_id": example.get("id", "unknown"),
                     "cwe_id": example.get("cwe_id", ""),
                     "severity": example.get("severity", "MEDIUM"),
-                    "quality_score": example.get("quality_score", 0.0),
+                    "quality_score": example.get("quality_score", 0.7),
                     "source": example.get("source", "curated"),
                     "has_fix": bool(example.get("fixed_code"))
                 })
+                curated_added += 1
         
-        print(f"✓ Loaded {len(vulnerable_examples)} curated vulnerable examples")
-        
-        # Show quality distribution
-        if vulnerable_examples:
-            avg_quality = sum(ex.get("quality_score", 0) for ex in vulnerable_examples) / len(vulnerable_examples)
-            with_fixes = sum(1 for ex in vulnerable_examples if ex.get("has_fix"))
-            print(f"   Average quality: {avg_quality:.3f}")
-            print(f"   With fixes: {with_fixes}/{len(vulnerable_examples)} ({100*with_fixes/len(vulnerable_examples):.1f}%)")
-        
-        return vulnerable_examples
+        print(f"✓ Added {curated_added} additional curated examples")
     
-    # Fallback to legacy format
-    print("Loading vulnerable examples from processed advisories (legacy format)...")
-    
-    if not os.path.exists(advisories_path):
-        print(f"❌ Error: {advisories_path} not found!")
-        print(f"Please run one of:")
-        print(f"  1. python src/run_data_curation.py (recommended - high quality)")
-        print(f"  2. python run_pipeline.py --step preprocess (legacy)")
-        raise FileNotFoundError(f"Advisories not found: {advisories_path}")
-    
-    with open(advisories_path, "r", encoding="utf-8") as f:
-        advisories = json.load(f)
-
-    for advisory in advisories:
-        # Use actual vulnerable code extracted from commits
-        if "vulnerable_code" in advisory and advisory["vulnerable_code"]:
-            code = advisory["vulnerable_code"].strip()
-            
-            # Filter out examples that are too short (likely not useful)
-            if len(code) > 20:
-                vulnerable_examples.append({
-                    "code": code,
-                    "label": 1,  # 1 = vulnerable
-                    "advisory_id": advisory.get("advisory_id", ""),
-                    "filename": advisory.get("filename", ""),
-                    "severity": "UNKNOWN",  # Legacy format doesn't have proper severity
-                    "quality_score": 0.5,  # Default for legacy data
-                    "source": "legacy"
-                })
-    
-    print(f"Found {len(vulnerable_examples)} vulnerable code examples (legacy)")
+    print(f"\n📈 Total vulnerable examples: {len(vulnerable_examples)}")
     
     if len(vulnerable_examples) == 0:
         print("⚠️  WARNING: No vulnerable examples found!")
-        print("   Run: python src/run_data_curation.py")
+        print("   Run: python run_pipeline.py --step preprocess")
+        raise ValueError("No vulnerable examples found!")
     
     return vulnerable_examples
 
