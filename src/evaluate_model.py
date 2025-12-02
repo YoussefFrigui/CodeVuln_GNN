@@ -45,6 +45,12 @@ def load_model_and_data(model_path=None, data_path='outputs/datasets/data_splits
     data_splits = torch.load(data_path, weights_only=False)
     test_data = data_splits['test_data']
     test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
+    
+    # Show test set composition
+    test_labels = [d.y.item() for d in test_data]
+    num_safe = sum(1 for l in test_labels if l == 0)
+    num_vuln = sum(1 for l in test_labels if l == 1)
+    print(f"Test set: {len(test_data)} samples ({num_safe} safe, {num_vuln} vulnerable)")
 
     return model, test_loader
 
@@ -81,7 +87,7 @@ def print_evaluation_report(y_true, y_pred, y_prob):
 
     # Classification report
     print("Classification Report:")
-    print(classification_report(y_true, y_pred, target_names=['Safe', 'Vulnerable']))
+    print(classification_report(y_true, y_pred, target_names=['Safe', 'Vulnerable'], zero_division=0))
 
     # Confusion matrix
     cm = confusion_matrix(y_true, y_pred)
@@ -90,14 +96,14 @@ def print_evaluation_report(y_true, y_pred, y_prob):
 
     # Additional metrics
     accuracy = np.mean(y_true == y_pred)
-    print(".4f")
+    print(f"\nOverall Accuracy: {accuracy:.4f}")
 
     # Class-specific metrics
     safe_correct = cm[0, 0] / cm[0].sum() if cm[0].sum() > 0 else 0
     vuln_correct = cm[1, 1] / cm[1].sum() if cm[1].sum() > 0 else 0
 
-    print(".4f")
-    print(".4f")
+    print(f"Safe Class Accuracy: {safe_correct:.4f}")
+    print(f"Vulnerable Class Accuracy: {vuln_correct:.4f}")
 
     return cm
 
@@ -122,8 +128,8 @@ def analyze_errors(y_true, y_pred, test_loader):
     errors = y_true != y_pred
     error_indices = np.where(errors)[0]
 
-    print(f"Total errors: {len(error_indices)} out of {len(y_true)} samples")
-    print(".2%")
+    error_rate = len(error_indices) / len(y_true) * 100
+    print(f"Total errors: {len(error_indices)} out of {len(y_true)} samples ({error_rate:.2f}%)")
 
     # Error types
     false_positives = np.sum((y_pred == 1) & (y_true == 0))

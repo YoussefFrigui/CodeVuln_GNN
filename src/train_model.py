@@ -314,6 +314,8 @@ def train_model(config: Dict[str, Any]):
             dropout=config["model"]["dropout"],
             gcn_layers=config["model"]["gcn_layers"],
             gat_heads=config["model"]["gat_heads"],
+            use_batch_norm=config["model"].get("use_batch_norm", True),
+            use_residual=config["model"].get("use_residual", True),
         )
         trainer = Trainer(model, device, config, class_weights, mlflow_enabled=mlflow_enabled)
 
@@ -339,6 +341,23 @@ def train_model(config: Dict[str, Any]):
         model_save_path = config["output"]["model_save_path"]
         torch.save(model.state_dict(), model_save_path)
         print(f"Model saved to {model_save_path}")
+        
+        # Save data splits for evaluation
+        splits_path = "outputs/datasets/data_splits.pt"
+        torch.save({
+            'train_data': train_dataset,
+            'val_data': val_dataset,
+            'test_data': test_dataset,
+            'train_labels': [d.y.item() for d in train_dataset],
+            'val_labels': [d.y.item() for d in val_dataset],
+            'test_labels': [d.y.item() for d in test_dataset],
+        }, splits_path)
+        print(f"Data splits saved to {splits_path}")
+        
+        # Print split statistics
+        test_safe = sum(1 for d in test_dataset if d.y.item() == 0)
+        test_vuln = sum(1 for d in test_dataset if d.y.item() == 1)
+        print(f"Test set composition: {test_safe} safe, {test_vuln} vulnerable")
         
         # Log model to MLflow
         if mlflow_enabled and config["mlflow"].get("log_models", True):

@@ -44,23 +44,27 @@ dataset:
 # Model Architecture
 model:
   num_node_features: 11
-  hidden_channels: 128  # Matches trained model
+  hidden_channels: 128
   num_classes: 2
   dropout: 0.3
-  gcn_layers: 4  # Matches trained model (has 4 layers)
-  gat_heads: 8
+  gcn_layers: 5         # Increased from 4 to 5 for deeper pattern learning
+  gat_heads: 8          # Number of attention heads
+  use_batch_norm: true  # Batch normalization for stability
+  use_residual: true    # Residual connections for better gradient flow
+  pooling: "multi"      # "multi" = mean+max+sum, "dual" = mean+max
 
 # Training Parameters
 training:
   device: "auto"  # "auto" will use "cuda" if available, else "cpu"
-  num_epochs: 20
+  num_epochs: 30        # Increased from 20 for better convergence
   batch_size: 64
-  learning_rate: 0.001
-  weight_decay: 0.00005
-  patience: 5
+  learning_rate: 0.0005 # Reduced from 0.001 for stability with deeper model
+  weight_decay: 0.0001  # Increased for better regularization
+  patience: 7           # More patience with lower learning rate
   test_split_size: 0.1
   validation_split_size: 0.1 # This is 0.1 of the (1 - test_split_size) data
   random_state: 42
+  scheduler: "cosine"   # Learning rate scheduler: "cosine", "step", or "none"
 
 # Evaluation and Output
 output:

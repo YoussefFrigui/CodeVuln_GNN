@@ -5,6 +5,9 @@ Main orchestrator script for the complete ML pipeline
 """
 
 import os
+# Fix OpenMP duplicate library issue on Windows - MUST be before other imports
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 import sys
 import subprocess
 import argparse
@@ -13,6 +16,10 @@ from pathlib import Path
 def run_script(script_name, description, extra_args=''):
     """Run a Python script and handle errors."""
     script_path = f"src/{script_name}"
+    
+    # Set environment variable for subprocesses too
+    env = os.environ.copy()
+    env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     
     # Use unbuffered Python to ensure real-time output
     cmd = f"python -u {script_path}"
@@ -26,7 +33,8 @@ def run_script(script_name, description, extra_args=''):
 
     try:
         # Run without capturing output to allow real-time progress bars
-        result = subprocess.run(cmd, shell=True, check=True)
+        # Pass environment with KMP_DUPLICATE_LIB_OK for Windows OpenMP fix
+        result = subprocess.run(cmd, shell=True, check=True, env=env)
         print(f"\n✓ {description} completed successfully")
         return True
     except subprocess.CalledProcessError as e:
@@ -35,17 +43,27 @@ def run_script(script_name, description, extra_args=''):
 
 def check_dependencies():
     """Check if required packages are installed."""
-    required_packages = [
-        'torch', 'torch_geometric', 'networkx',
-        'matplotlib', 'seaborn', 'sklearn', 'tqdm', 'yaml', 'mlflow'
-    ]
+    import importlib.util
+    
+    # Map of package names for importlib.util.find_spec (uses package install names)
+    required_packages = {
+        'torch': 'torch',
+        'torch_geometric': 'torch-geometric', 
+        'networkx': 'networkx',
+        'matplotlib': 'matplotlib',
+        'seaborn': 'seaborn',
+        'sklearn': 'scikit-learn',
+        'tqdm': 'tqdm',
+        'yaml': 'pyyaml',
+        'mlflow': 'mlflow'
+    }
 
     missing_packages = []
-    for package in required_packages:
-        try:
-            __import__(package.replace('-', '_'))
-        except ImportError:
-            missing_packages.append(package)
+    for spec_name, pip_name in required_packages.items():
+        # Use find_spec which doesn't actually import the module
+        # This avoids issues with import side effects
+        if importlib.util.find_spec(spec_name) is None:
+            missing_packages.append(pip_name)
 
     if missing_packages:
         print("Missing required packages:", ', '.join(missing_packages))
