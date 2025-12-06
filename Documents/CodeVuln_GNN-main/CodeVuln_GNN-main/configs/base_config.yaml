@@ -1,0 +1,44 @@
+# File and Directory Paths
+data:
+  advisories_path: "outputs/datasets/python_advisories.json"
+  codesearchnet_dir: "data/python/python/final/jsonl/train"
+  processed_dataset_path: "outputs/datasets/massive_codesearchnet_dataset.pt"
+
+# Data Processing Parameters
+dataset:
+  max_safe_examples: 200000
+  max_nodes_per_graph: 100
+
+# Model Architecture
+model:
+  num_node_features: 11
+  hidden_channels: 128
+  num_classes: 2
+  dropout: 0.3
+  gcn_layers: 4
+  gat_heads: 8
+
+# Training Parameters
+training:
+  device: "auto"  # "auto" will use "cuda" if available, else "cpu"
+  num_epochs: 20
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.00005
+  patience: 5
+  test_split_size: 0.1
+  validation_split_size: 0.1 # This is 0.1 of the (1 - test_split_size) data
+  random_state: 42
+
+# Evaluation and Output
+output:
+  model_save_path: "outputs/models/massive_vulnerability_gnn_model.pt"
+
+# MLflow Experiment Tracking
+mlflow:
+  enabled: true
+  experiment_name: "GNN_Vulnerability_Detection"
+  tracking_uri: "outputs/mlruns"  # Local directory for MLflow tracking
+  run_name_prefix: "gnn_vuln"  # Prefix for run names
+  log_models: true  # Whether to log models to MLflow
+  log_artifacts: true  # Whether to log confusion matrix and other artifacts
