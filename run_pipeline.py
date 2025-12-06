@@ -3,7 +3,7 @@
 GNN Vulnerability Detection Pipeline
 Main orchestrator script for the complete ML pipeline
 """
-
+#!/usr/bin/env python3
 import os
 import sys
 import subprocess
