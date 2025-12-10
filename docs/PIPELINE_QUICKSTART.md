@@ -9,159 +9,145 @@ Complete workflow for training a vulnerability detection model from scratch.
 ✅ CodeSearchNet Python dataset downloaded to `data/python/python/final/jsonl/train/`  
 ✅ Dependencies installed: `pip install -r requirements.txt`
 
+## Quick Start (If Data Already Prepared)
+
+```bash
+# Run entire pipeline
+python run_pipeline.py --step all
+
+# Or run individual steps
+python run_pipeline.py --step preprocess   # Create dataset
+python run_pipeline.py --step train        # Train model
+python run_pipeline.py --step evaluate     # Evaluate model
+```
+
 ## One-Time Setup
 
-### 1. Set GitHub Token (OPTIONAL but RECOMMENDED)
+### 1. Set GitHub Token (RECOMMENDED)
 
 Increases API rate limit from 60 to 5000 requests/hour.
 
 **Windows Command Prompt:**
 ```cmd
-set GITHUB_PAT=ghp_your_token_here
+set GITHUB_TOKEN=ghp_your_token_here
 ```
 
 **Windows PowerShell:**
 ```powershell
-$env:GITHUB_PAT="ghp_your_token_here"
+$env:GITHUB_TOKEN="ghp_your_token_here"
 ```
 
-### 2. Configure Parameters (OPTIONAL)
+### 2. Configure Parameters
 
 Edit `configs/base_config.yaml` to adjust:
 - Dataset size (`max_safe_examples: 200000`)
 - Model architecture (`hidden_channels`, `gcn_layers`, etc.)
 - Training parameters (`num_epochs`, `batch_size`, `learning_rate`)
 
-## Complete Pipeline
+## Full Data Pipeline (First Time Only)
 
 ### Step 0: Filter Python Advisories
-
-Extract PyPI ecosystem advisories from GitHub Security Advisory Database.
 
 ```bash
 python src/filter_python_advisories.py
 ```
 
 **Time:** ~30 seconds  
-**Output:** `outputs/datasets/python_advisories.json`  
-**Size:** ~2MB (metadata for ~3,900 advisories)
+**Output:** `outputs/datasets/python_advisories.json`
 
 ---
 
-### Step 1: Extract Vulnerable Code
+### Step 1: Fetch Full Files from GitHub
 
-Fetch commits from GitHub and extract actual vulnerable Python code from git diffs.
+This fetches complete Python files (not just diffs) from GitHub API:
 
 ```bash
-python src/preprocess_advisories.py
+python src/fetch_full_files.py
+
+# Resume if interrupted
+python src/fetch_full_files.py --resume
 ```
 
-**Time:** 
-- With token: ~15 minutes (5000 req/hour)
-- Without token: ~3 hours (60 req/hour + automatic pauses)
+**Time:** 2-8 hours (depending on rate limits)  
+**Output:** `outputs/datasets/processed_advisories_full_files.json`
 
-**Output:** `outputs/datasets/processed_advisories_with_code.json`  
-**Size:** ~15MB (~1,800 vulnerable code examples)
-
-**Progress indicators:**
-```
-Filtering advisories with commit URLs: 100%|████| 3928/3928
-Fetching commit data from GitHub: 100%|████| 2847/2847 [15:23<00:00]
-Extracting vulnerable code: 100%|████| 2623/2623 [00:12<00:00]
-```
+💡 This is a long-running process - run separately from training!
 
 ---
 
-### Step 2: Create Graph Dataset
+### Step 2: Extract Code from Descriptions
 
-Convert code to AST graphs and combine vulnerable + safe examples.
+For advisories without commit URLs:
 
 ```bash
-python src/create_dataset.py
+python src/extract_description_code.py
 ```
 
-**Time:** ~15 minutes  
-**Output:** `outputs/datasets/final_graph_dataset.pt`  
-**Size:** ~1.2GB (200k examples converted to graphs)
-
-**Progress indicators:**
-```
-Processing CodeSearchNet files: 100%|████| 127/127 [03:45<00:00]
-Converting to graphs: 100%|████| 201897/201897 [12:34<00:00]
-```
+**Time:** ~1 minute  
+**Output:** `outputs/datasets/description_extracted_code.json`
 
 ---
 
-### Step 3: Train Model
+### Step 3: Merge All Data Sources
 
-Train GNN with MLflow experiment tracking.
+Combine all sources with deduplication:
 
 ```bash
-python src/train_model.py
+python src/merge_all_sources.py
 ```
 
-**Time:** ~30 minutes (GPU) or ~2 hours (CPU)  
-**Output:** `outputs/models/trained_gnn_model.pt`  
-**Size:** ~5MB
-
-**Progress indicators:**
-```
-Epoch 1/20: 100%|████| 3141/3141 [02:34<00:00] loss: 0.234, acc: 0.912
-Validation: 100%|████| 349/349 [00:15<00:00] loss: 0.198, acc: 0.945
-```
+**Time:** ~10 seconds  
+**Output:** `outputs/datasets/merged_vulnerabilities.json`
 
 ---
 
-### Step 4: View Experiment Results
+### Step 4: Create Dataset & Train
 
-Launch MLflow UI to compare experiments.
+Now use the main pipeline:
 
 ```bash
-python view_mlflow.py
+python run_pipeline.py --step all
 ```
 
-Opens browser to `http://localhost:5000` with:
-- All experiment runs and metrics
-- Model versions and artifacts
-- Hyperparameter comparisons
-- Metric plots (loss, accuracy, F1, etc.)
+This:
+1. Creates graph dataset from merged vulnerabilities + CodeSearchNet
+2. Trains GNN model
+3. Evaluates and saves results
 
 ---
 
 ## Quick Commands Reference
 
 ```bash
-# Full pipeline from scratch
-python src/filter_python_advisories.py
-python src/preprocess_advisories.py
-python src/create_dataset.py
-python src/train_model.py
-python view_mlflow.py
+# === DATA ACQUISITION (run once) ===
+python src/filter_python_advisories.py       # Filter advisories
+python src/fetch_full_files.py               # Fetch from GitHub (hours)
+python src/extract_description_code.py       # Extract from descriptions
+python src/merge_all_sources.py              # Combine all sources
 
-# Skip preprocessing (if already done)
-python src/create_dataset.py
-python src/train_model.py
+# === MODEL DEVELOPMENT (run often) ===
+python run_pipeline.py --step all            # Full pipeline
+python run_pipeline.py --step train          # Training only
+python run_pipeline.py --step evaluate       # Evaluation only
 
-# Only training (if dataset exists)
-python src/train_model.py
-
-# Evaluate saved model
-python src/evaluate_model.py
+# === UTILITIES ===
+python view_mlflow.py                        # View experiment tracking
 ```
 
 ---
 
 ## Expected Timeline
 
-| Step | With GPU | With CPU | Notes |
-|------|----------|----------|-------|
-| Filter advisories | 30s | 30s | I/O bound |
-| Extract vulnerable code | 15m | 15m | Network bound (with token) |
-| Create dataset | 10m | 15m | CPU + I/O bound |
-| Train model | 30m | 2h | GPU accelerated |
-| **Total** | **~1 hour** | **~2.5 hours** | First run only |
-
-**Subsequent training runs:** Skip preprocessing (Steps 0-2), train directly in ~30 minutes.
+| Step | Duration | Notes |
+|------|----------|-------|
+| Filter advisories | 30s | One-time |
+| Fetch full files | 2-8h | One-time, has resume |
+| Extract descriptions | 1m | One-time |
+| Merge sources | 10s | One-time |
+| Create dataset | 10-15m | After any data change |
+| Train model | 30m GPU / 2h CPU | Each experiment |
+| **Total first run** | **3-9 hours** | Mostly fetching |
+| **Subsequent runs** | **30-45 minutes** | Training only |
 
 ---
 

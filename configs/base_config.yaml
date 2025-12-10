@@ -1,18 +1,27 @@
 # File and Directory Paths
 data:
   # Path to processed advisories with actual vulnerable code extracted from GitHub commits
-  # This file is created by running: python run_pipeline.py --step preprocess
-  advisories_path: "outputs/datasets/processed_advisories_with_code.json"
+  # Options:
+  #   - merged_vulnerabilities.json: ALL sources combined (recommended)
+  #   - processed_advisories_full_files.json: Full-file extraction only
+  #   - processed_advisories_with_code.json: Original diff-based extraction
+  advisories_path: "outputs/datasets/merged_vulnerabilities.json"
+  
+  # Individual source files (used by merge script, not directly by training)
+  full_files_path: "outputs/datasets/processed_advisories_full_files.json"
+  diff_based_path: "outputs/datasets/processed_advisories_with_code.json"
+  description_extracted_path: "outputs/datasets/description_extracted_code.json"
+  
   codesearchnet_dir: "data/python/python/final/jsonl/train"
   processed_dataset_path: "outputs/datasets/final_graph_dataset.pt"
   
-  # High-quality curated datasets (new!)
+  # High-quality curated datasets (included in merge)
   curated_dataset_path: "outputs/datasets/curated_vulnerabilities.json"
   validated_dataset_path: "outputs/datasets/validated_vulnerabilities.json"
   
   # Data source configuration
   sources:
-    use_curated_vulnerabilities: true  # Use high-quality curated data (recommended)
+    use_curated_vulnerabilities: false  # Already included in merged file
     github_advisories: true
     nvd: false  # Set to true and provide API key
     synthetic: true
@@ -38,32 +47,33 @@ dataset:
     max_per_cwe: 150  # Maximum examples per CWE type
     balance_by_complexity: true  # Balance across complexity levels
     include_synthetic: true  # Include synthetic vulnerabilities
-    synthetic_count: 200  # Number of synthetic examples to generate
+    synthetic_count: 700  # Increased: Number of synthetic vulnerable examples (100 per category x 7 categories)
+    simple_safe_count: 1000  # NEW: Simple safe examples to prevent false positives on basic code
 
-# Model Architecture
+# Model Architecture (v2 - Enhanced for reduced false positives)
 model:
-  num_node_features: 11
+  num_node_features: 16  # Enhanced: Was 11, now 16 with semantic features
   hidden_channels: 128
   num_classes: 2
-  dropout: 0.3
-  gcn_layers: 5         # Increased from 4 to 5 for deeper pattern learning
-  gat_heads: 8          # Number of attention heads
-  use_batch_norm: true  # Batch normalization for stability
-  use_residual: true    # Residual connections for better gradient flow
-  pooling: "multi"      # "multi" = mean+max+sum, "dual" = mean+max
+  dropout: 0.35          # Slightly increased for better regularization
+  gcn_layers: 4          # Reduced from 5 - dual GAT compensates
+  gat_heads: 8           # Number of attention heads (split between local/global)
+  use_batch_norm: true   # Batch normalization for stability
+  use_residual: true     # Residual connections for better gradient flow
+  pooling: "multi"       # "multi" = mean+max+attention (v2)
 
-# Training Parameters
+# Training Parameters (optimized for v2 architecture)
 training:
   device: "auto"  # "auto" will use "cuda" if available, else "cpu"
-  num_epochs: 30        # Increased from 20 for better convergence
+  num_epochs: 25         # More epochs for complex architecture
   batch_size: 64
-  learning_rate: 0.0005 # Reduced from 0.001 for stability with deeper model
-  weight_decay: 0.0001  # Increased for better regularization
-  patience: 7           # More patience with lower learning rate
+  learning_rate: 0.0003  # Lower LR for stable training with new components
+  weight_decay: 0.0002   # Increased for better regularization
+  patience: 10           # More patience - model takes longer to converge
   test_split_size: 0.1
   validation_split_size: 0.1 # This is 0.1 of the (1 - test_split_size) data
   random_state: 42
-  scheduler: "cosine"   # Learning rate scheduler: "cosine", "step", or "none"
+  scheduler: "cosine"    # Learning rate scheduler: "cosine", "step", or "none"
 
 # Evaluation and Output
 output:
@@ -82,7 +92,15 @@ mlflow:
 llm:
   enabled: true
   provider: "google"  # Currently only Google Gemini is supported
-  model: "gemini-2.0-flash"  # Fast model for explanations
+  model: "gemini-2.5-pro"  # Advanced model with thinking capabilities for better analysis
   # api_key: ""  # Set via GEMINI_API_KEY environment variable (recommended)
   temperature: 0.3  # Lower = more focused explanations
-  max_tokens: 1500  # Max tokens for explanation
+  max_output_tokens: 8192  # Maximum output tokens for comprehensive analysis
+
+# Hybrid Analyzer (GNN + LLM combined detection)
+hybrid:
+  enabled: true
+  gnn_weight: 0.15  # GNN provides initial signal only
+  llm_weight: 0.85  # LLM is the authoritative scorer - dominates final score
+  temperature: 0.1  # Very low temperature for consistent scoring
+  max_output_tokens: 8192  # Maximum output tokens for detailed analysis

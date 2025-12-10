@@ -286,7 +286,7 @@ class VulnerabilityExplainer:
     3. Generate explanation using Gemini
     """
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.5-pro"):
         """
         Initialize the explainer.
         
@@ -442,7 +442,7 @@ Be concise but thorough. If the code is safe, explain why the patterns detected 
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.3,  # Lower temperature for more focused output
-                    max_output_tokens=1500,
+                    max_output_tokens=8192,  # Maximum output for comprehensive explanations
                 )
             )
             

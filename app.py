@@ -39,14 +39,21 @@ except ImportError:
     LLM_AVAILABLE = False
     print("Warning: LLM explainer not available")
 
+# Import Hybrid Analyzer (GNN + LLM combined detection)
+try:
+    from src.explainability.hybrid_analyzer import HybridVulnerabilityAnalyzer
+    HYBRID_AVAILABLE = True
+except ImportError:
+    HYBRID_AVAILABLE = False
+    print("Warning: Hybrid analyzer not available")
+
 
 # ============================================================================
 # Configuration & Model Loading
 # ============================================================================
 
-@st.cache_resource
-def load_model():
-    """Load the trained GNN model."""
+def load_model_uncached():
+    """Load the trained GNN model without caching."""
     try:
         # Load config
         with open('configs/base_config.yaml', 'r') as f:
@@ -67,14 +74,22 @@ def load_model():
         # Load trained weights
         model_path = config["output"]["model_save_path"]
         if os.path.exists(model_path):
+            # Get model file modification time
+            model_mtime = os.path.getmtime(model_path)
             model.load_state_dict(torch.load(model_path, map_location='cpu', weights_only=False))
             model.eval()
-            return model, config, True
+            return model, config, True, model_mtime
         else:
-            return model, config, False
+            return model, config, False, None
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        return None, None, False
+        return None, None, False, None
+
+
+@st.cache_resource
+def load_model(model_mtime_hash: str = None):
+    """Load the trained GNN model (cached based on model file modification time)."""
+    return load_model_uncached()
 
 
 def get_llm_explainer(api_key: str = None):
@@ -124,18 +139,20 @@ def analyze_code(code: str, model, config) -> dict:
         output = model(pyg_graph.x, pyg_graph.edge_index, batch)
         probabilities = torch.softmax(output, dim=1)
         
+        # Model outputs: index 0 = safe, index 1 = vulnerable
+        safe_probability = probabilities[0][0].item()
         vuln_probability = probabilities[0][1].item()
         
         # Use threshold instead of argmax for more sensitive detection
         is_vulnerable = vuln_probability > threshold
-        confidence = vuln_probability if is_vulnerable else probabilities[0][0].item()
+        confidence = vuln_probability if is_vulnerable else safe_probability
     
     return {
         "error": False,
         "is_vulnerable": is_vulnerable,
         "confidence": confidence,
         "vulnerability_score": vuln_probability,
-        "safe_score": probabilities[0][0].item(),
+        "safe_score": safe_probability,
         "num_nodes": pyg_graph.x.size(0),
         "num_edges": pyg_graph.edge_index.size(1),
     }
@@ -285,16 +302,23 @@ def main():
         to detect potential security issues in your code.
     """)
     
-    # Load model
-    model, config, model_loaded = load_model()
+    # Get model file modification time to detect changes
+    model_path = "outputs/models/trained_gnn_model.pt"
+    model_mtime = os.path.getmtime(model_path) if os.path.exists(model_path) else None
+    
+    # Load model (pass mtime hash to invalidate cache when model changes)
+    # Using string hash because Streamlit only caches based on hashable parameters
+    mtime_hash = str(model_mtime) if model_mtime else "none"
+    result = load_model(model_mtime_hash=mtime_hash)
+    model, config, model_loaded = result[0], result[1], result[2]
     
     # Sidebar
     with st.sidebar:
         st.header("ℹ️ About")
         st.markdown("""
             This scanner uses a **Graph Neural Network (GNN)** trained on:
-            - 4,000+ vulnerable code examples
-            - 20,000+ safe code examples
+            - 5,000+ vulnerable code examples
+            - 21,000+ safe code examples
             - 200+ unique CWE types
             
             **How it works:**
@@ -309,12 +333,21 @@ def main():
         st.header("📊 Model Status")
         if model_loaded:
             st.success("✅ Model loaded successfully")
+            # Show model file timestamp
+            if model_mtime:
+                from datetime import datetime
+                mtime_str = datetime.fromtimestamp(model_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                st.caption(f"Model updated: {mtime_str}")
             st.info(f"""
                 **Architecture:**
                 - GCN Layers: {config['model']['gcn_layers']}
                 - GAT Heads: {config['model']['gat_heads']}
                 - Hidden Channels: {config['model']['hidden_channels']}
             """)
+            # Add reload button
+            if st.button("🔄 Reload Model"):
+                st.cache_resource.clear()
+                st.rerun()
         else:
             st.warning("⚠️ Model not found. Using untrained model.")
             st.info("Run `python run_pipeline.py --step train` to train the model.")
@@ -350,10 +383,21 @@ def main():
         st.divider()
         
         # LLM Explainability Settings
-        st.header("🤖 AI Explainability")
+        st.header("🤖 AI Analysis Mode")
+        
+        # Hybrid mode toggle
+        enable_hybrid = st.checkbox(
+            "🔀 Enable Hybrid Detection (GNN + LLM)",
+            value=True,
+            help="Combine GNN structural analysis with LLM semantic understanding for more accurate detection"
+        )
+        
+        if enable_hybrid and not HYBRID_AVAILABLE:
+            st.warning("⚠️ Hybrid analyzer not available")
+            enable_hybrid = False
         
         enable_llm = st.checkbox(
-            "Enable LLM Explanations",
+            "💬 Enable LLM Explanations",
             value=True,
             help="Use Google Gemini to generate detailed explanations"
         )
@@ -378,8 +422,9 @@ def main():
             if not LLM_AVAILABLE:
                 st.warning("⚠️ Install google-genai: `pip install google-genai`")
     
-    # Store threshold in session state
+    # Store settings in session state
     st.session_state.detection_threshold = detection_threshold
+    st.session_state.enable_hybrid = enable_hybrid if 'enable_hybrid' in dir() else False
     st.session_state.enable_llm = enable_llm
     
     # Main content
@@ -445,6 +490,25 @@ def main():
                     with st.spinner("Analyzing code..."):
                         result = analyze_code(code_input, model, config)
                         ast_info = get_ast_info(code_input)
+                        
+                        # Hybrid Analysis (GNN + LLM combined detection)
+                        hybrid_result = None
+                        if st.session_state.get("enable_hybrid", False) and HYBRID_AVAILABLE:
+                            api_key = st.session_state.get("gemini_api_key")
+                            if api_key:
+                                analyzer = HybridVulnerabilityAnalyzer(api_key=api_key)
+                                hybrid_result = analyzer.analyze_quick(
+                                    code_input,
+                                    {
+                                        "vulnerability_score": result.get("vulnerability_score", 0.5),
+                                        "is_vulnerable": result.get("is_vulnerable", False),
+                                    }
+                                )
+                                # Override result with hybrid analysis
+                                result["is_vulnerable"] = hybrid_result["is_vulnerable"]
+                                result["vulnerability_score"] = hybrid_result["combined_score"]
+                                result["confidence"] = hybrid_result["confidence"]
+                                result["safe_score"] = hybrid_result["safe_score"]
                     
                     if result.get("error"):
                         st.error(f"❌ {result['message']}")
@@ -469,22 +533,182 @@ def main():
                         
                         st.divider()
                         
-                        # Metrics
-                        col_m1, col_m2 = st.columns(2)
-                        with col_m1:
-                            st.metric(
-                                "Vulnerability Score",
-                                f"{result['vulnerability_score']*100:.1f}%",
-                                delta=None,
-                            )
-                        with col_m2:
-                            st.metric(
-                                "Confidence",
-                                f"{result['confidence']*100:.1f}%",
-                            )
+                        # Show single unified score (LLM-dominant when hybrid is enabled)
+                        if hybrid_result:
+                            # Single score display - clean and simple
+                            col_score, col_confidence = st.columns(2)
+                            with col_score:
+                                st.metric(
+                                    "🎯 Vulnerability Score",
+                                    f"{hybrid_result['vulnerability_score']*100:.1f}%",
+                                    delta=None,
+                                    help="AI-powered vulnerability assessment"
+                                )
+                            with col_confidence:
+                                st.metric(
+                                    "📊 Confidence",
+                                    f"{hybrid_result['confidence']*100:.1f}%",
+                                    delta=None,
+                                    help="Model confidence in this assessment"
+                                )
+                            
+                            # Progress bar for vulnerability likelihood
+                            st.progress(hybrid_result['vulnerability_score'], text="Vulnerability likelihood")
+                            
+                            # Risk level badge
+                            risk_colors = {
+                                "critical": "🔴",
+                                "high": "🟠",
+                                "medium": "🟡",
+                                "low": "🟢",
+                                "safe": "✅",
+                            }
+                            risk_icon = risk_colors.get(hybrid_result["risk_level"], "⚪")
+                            st.info(f"**Risk Level**: {risk_icon} {hybrid_result['risk_level'].upper()}")
+                            
+                            st.divider()
+                            
+                            # DEBUG: Show raw hybrid result (temporary)
+                            with st.expander("🔧 Debug: Raw LLM Response", expanded=False):
+                                st.json({
+                                    "key_issues": hybrid_result.get("key_issues", []),
+                                    "summary": hybrid_result.get("summary", ""),
+                                    "recommendations": hybrid_result.get("recommendations", []),
+                                    "llm_reasoning": hybrid_result.get("llm_reasoning", ""),
+                                    "detected_patterns": hybrid_result.get("detected_patterns", []),
+                                })
+                            
+                            # Key Issues Section - only show if vulnerabilities found
+                            key_issues = hybrid_result.get("key_issues") or hybrid_result.get("detected_patterns", [])
+                            if key_issues and len(key_issues) > 0:
+                                valid_issues = [i for i in key_issues if i and i.lower() not in ["none", "n/a", "none - code appears secure", ""]]
+                                if valid_issues:
+                                    st.subheader("🔍 Key Security Issues")
+                                    for issue in valid_issues:
+                                        st.error(f"⚠️ {issue}")
+                            
+                            # Detailed Summary - always show
+                            summary = hybrid_result.get("summary") or hybrid_result.get("llm_reasoning", "")
+                            st.subheader("📝 Detailed Analysis")
+                            if summary:
+                                st.markdown(summary)
+                            else:
+                                st.info("No detailed analysis available from LLM.")
+                            
+                            # Recommendations - single unified box
+                            recommendations = hybrid_result.get("recommendations", [])
+                            if recommendations and len(recommendations) > 0:
+                                valid_recs = [r for r in recommendations if r and r.lower() not in ["none", "none needed", "n/a", "none needed - continue following secure coding practices", ""]]
+                                if valid_recs:
+                                    st.subheader("💡 Recommendations")
+                                    
+                                    # Separate code fixes from text recommendations
+                                    code_lines = []
+                                    text_recs = []
+                                    in_code_block = False
+                                    current_code = []
+                                    
+                                    for rec in valid_recs:
+                                        rec_stripped = rec.strip()
+                                        # Check if this looks like code
+                                        if rec_stripped.startswith("```"):
+                                            if in_code_block:
+                                                # End of code block
+                                                in_code_block = False
+                                                if current_code:
+                                                    code_lines.extend(current_code)
+                                                    current_code = []
+                                            else:
+                                                # Start of code block
+                                                in_code_block = True
+                                        elif in_code_block:
+                                            current_code.append(rec_stripped)
+                                        elif any(rec_stripped.startswith(kw) for kw in ['import ', 'from ', 'def ', 'class ', 'if ', 'for ', 'while ', 'return ', 'subprocess.', 'os.', '    ', '\t', '#']):
+                                            # This looks like code
+                                            code_lines.append(rec_stripped)
+                                        else:
+                                            # This is a text recommendation
+                                            text_recs.append(rec_stripped)
+                                    
+                                    # Display text recommendations in a single styled box
+                                    if text_recs:
+                                        st.markdown("""
+                                            <style>
+                                            .recommendations-box {
+                                                background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+                                                border-left: 4px solid #4caf50;
+                                                border-radius: 8px;
+                                                padding: 16px 20px;
+                                                margin-bottom: 16px;
+                                                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                            }
+                                            .recommendations-box ul {
+                                                margin: 0;
+                                                padding-left: 20px;
+                                            }
+                                            .recommendations-box li {
+                                                margin-bottom: 8px;
+                                                line-height: 1.5;
+                                            }
+                                            .recommendations-box li:last-child {
+                                                margin-bottom: 0;
+                                            }
+                                            </style>
+                                        """, unsafe_allow_html=True)
+                                        
+                                        # Build list items
+                                        list_items = ""
+                                        for rec in text_recs:
+                                            rec_text = rec.strip()
+                                            if rec_text.startswith(("- ", "• ", "* ")):
+                                                rec_text = rec_text[2:]
+                                            # Remove leading numbers like "1. " or "1) "
+                                            if len(rec_text) > 2 and rec_text[0].isdigit() and rec_text[1] in ".)":
+                                                rec_text = rec_text[2:].strip()
+                                            list_items += f"<li>{rec_text}</li>"
+                                        
+                                        st.markdown(f"""
+                                            <div class="recommendations-box">
+                                                <ul>{list_items}</ul>
+                                            </div>
+                                        """, unsafe_allow_html=True)
+                                    
+                                    # Display code fix in a single code block
+                                    if code_lines:
+                                        st.markdown("**🔧 Suggested Code Fix:**")
+                                        # Join all code lines into a single block
+                                        code_block = "\n".join(code_lines)
+                                        st.code(code_block, language="python")
+                                    
+                                    # Add a helpful note at the bottom
+                                    st.caption("💡 Implementing these recommendations will help improve your code's security posture.")
+                            
+                            # Fixed Code - show complete corrected example
+                            fixed_code = hybrid_result.get("fixed_code", "")
+                            if fixed_code and fixed_code.strip() and fixed_code.lower() not in ["no fix needed - code is secure", "no fix needed", "none", ""]:
+                                st.subheader("🔧 Fixed Code Example")
+                                st.code(fixed_code.strip(), language="python")
+                                st.caption("📋 Copy this code to replace the vulnerable implementation.")
+                            
+                            st.divider()
                         
-                        # Progress bar
-                        st.progress(result['vulnerability_score'], text="Vulnerability likelihood")
+                        # Original metrics (if not using hybrid)
+                        if not hybrid_result:
+                            col_m1, col_m2 = st.columns(2)
+                            with col_m1:
+                                st.metric(
+                                    "Vulnerability Score",
+                                    f"{result['vulnerability_score']*100:.1f}%",
+                                    delta=None,
+                                )
+                            with col_m2:
+                                st.metric(
+                                    "Confidence",
+                                    f"{result['confidence']*100:.1f}%",
+                                )
+                            
+                            # Progress bar
+                            st.progress(result['vulnerability_score'], text="Vulnerability likelihood")
                         
                         st.divider()
                         
@@ -512,51 +736,52 @@ def main():
                                 for node_type, count in sorted_counts:
                                     st.write(f"- {node_type}: {count}")
                         
-                        # LLM Explanation Section
-                        st.divider()
-                        st.subheader("🤖 AI-Powered Explanation")
-                        
-                        if st.session_state.get("enable_llm", True) and LLM_AVAILABLE:
-                            api_key = st.session_state.get("gemini_api_key")
+                        # LLM Explanation Section (only if not using hybrid mode which already includes LLM)
+                        if not hybrid_result:
+                            st.divider()
+                            st.subheader("🤖 AI-Powered Explanation")
                             
-                            if api_key:
-                                with st.spinner("🔮 Generating detailed explanation..."):
-                                    explainer = get_llm_explainer(api_key)
-                                    if explainer:
-                                        explanation_result = explainer.explain(
-                                            code=code_input,
-                                            gnn_result={
-                                                "is_vulnerable": result["is_vulnerable"],
-                                                "vulnerability_score": result["vulnerability_score"],
-                                            }
-                                        )
-                                        
-                                        if explanation_result.get("success"):
-                                            st.markdown(explanation_result["explanation"])
+                            if st.session_state.get("enable_llm", True) and LLM_AVAILABLE:
+                                api_key = st.session_state.get("gemini_api_key")
+                                
+                                if api_key:
+                                    with st.spinner("🔮 Generating detailed explanation..."):
+                                        explainer = get_llm_explainer(api_key)
+                                        if explainer:
+                                            explanation_result = explainer.explain(
+                                                code=code_input,
+                                                gnn_result={
+                                                    "is_vulnerable": result["is_vulnerable"],
+                                                    "vulnerability_score": result["vulnerability_score"],
+                                                }
+                                            )
                                             
-                                            # Show detected patterns
-                                            with st.expander("🔍 Detected Patterns (RAG Context)"):
-                                                ctx = explanation_result.get("context", {})
-                                                if ctx.get("dangerous_patterns"):
-                                                    st.write("**Vulnerability Patterns:**")
-                                                    for p in ctx["dangerous_patterns"]:
-                                                        st.write(f"- {p['type']}: {p['description']}")
-                                                if ctx.get("user_inputs"):
-                                                    st.write(f"**User Input Sources:** {', '.join(ctx['user_inputs'])}")
-                                                if ctx.get("string_operations"):
-                                                    st.write(f"**String Operations:** {', '.join(ctx['string_operations'])}")
+                                            if explanation_result.get("success"):
+                                                st.markdown(explanation_result["explanation"])
+                                                
+                                                # Show detected patterns
+                                                with st.expander("🔍 Detected Patterns (RAG Context)"):
+                                                    ctx = explanation_result.get("context", {})
+                                                    if ctx.get("dangerous_patterns"):
+                                                        st.write("**Vulnerability Patterns:**")
+                                                        for p in ctx["dangerous_patterns"]:
+                                                            st.write(f"- {p['type']}: {p['description']}")
+                                                    if ctx.get("user_inputs"):
+                                                        st.write(f"**User Input Sources:** {', '.join(ctx['user_inputs'])}")
+                                                    if ctx.get("string_operations"):
+                                                        st.write(f"**String Operations:** {', '.join(ctx['string_operations'])}")
+                                            else:
+                                                # Show fallback explanation
+                                                st.warning("⚠️ LLM explanation unavailable. Showing pattern-based analysis:")
+                                                st.markdown(explanation_result.get("fallback_explanation", "No explanation available."))
                                         else:
-                                            # Show fallback explanation
-                                            st.warning("⚠️ LLM explanation unavailable. Showing pattern-based analysis:")
-                                            st.markdown(explanation_result.get("fallback_explanation", "No explanation available."))
-                                    else:
-                                        st.warning("Could not initialize explainer.")
+                                            st.warning("Could not initialize explainer.")
+                                else:
+                                    st.info("💡 Add your Gemini API key in the sidebar to get AI-powered explanations.")
+                            elif not LLM_AVAILABLE:
+                                st.info("💡 Install `google-genai` package to enable AI explanations.")
                             else:
-                                st.info("💡 Add your Gemini API key in the sidebar to get AI-powered explanations.")
-                        elif not LLM_AVAILABLE:
-                            st.info("💡 Install `google-genai` package to enable AI explanations.")
-                        else:
-                            st.info("💡 Enable LLM explanations in the sidebar for detailed analysis.")
+                                st.info("💡 Enable LLM explanations in the sidebar for detailed analysis.")
             
             elif analyze_button:
                 st.warning("⚠️ Please enter some code to analyze.")

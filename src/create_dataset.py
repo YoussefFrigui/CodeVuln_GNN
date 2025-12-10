@@ -64,18 +64,33 @@ def load_vulnerable_examples(advisories_path: str, use_curated: bool = True,
                 # Filter: code > 20 chars and not duplicate
                 if len(code) > 20 and code_hash not in seen_codes:
                     seen_codes.add(code_hash)
+                    
+                    # Get CWE ID - handle both string and list formats
+                    cwe_id = advisory.get("cwe_id", "")
+                    if not cwe_id and advisory.get("cwe_ids"):
+                        cwe_id = advisory["cwe_ids"][0] if advisory["cwe_ids"] else ""
+                    
                     vulnerable_examples.append({
                         "code": code,
                         "label": 1,  # 1 = vulnerable
                         "advisory_id": advisory.get("advisory_id", advisory.get("id", "")),
                         "filename": advisory.get("filename", ""),
-                        "cwe_id": advisory.get("cwe_id", ""),
+                        "cwe_id": cwe_id,
                         "severity": advisory.get("severity", "MEDIUM"),
-                        "quality_score": 0.6,  # Default for raw data
-                        "source": "github_advisory"
+                        "quality_score": advisory.get("quality_score", 0.6),
+                        "source": "github_advisory",
+                        "is_complete_file": advisory.get("is_complete_file", False),
+                        "fetch_method": advisory.get("fetch_method", "diff_only"),
                     })
         
         print(f"✓ Loaded {len(vulnerable_examples)} examples from raw advisories")
+        
+        # Show stats for complete vs partial files
+        complete_files = sum(1 for ex in vulnerable_examples if ex.get("is_complete_file", False))
+        partial_files = len(vulnerable_examples) - complete_files
+        if complete_files > 0 or partial_files > 0:
+            print(f"   📁 Complete files: {complete_files} ({100*complete_files/len(vulnerable_examples):.1f}%)")
+            print(f"   📄 Partial diffs:  {partial_files} ({100*partial_files/len(vulnerable_examples):.1f}%)")
     
     # ALSO load from curated/validated dataset if available (adds extra quality examples)
     if use_curated and curated_path and os.path.exists(curated_path):
@@ -202,6 +217,55 @@ def create_dataset(config: Dict[str, Any]):
         use_curated=use_curated,
         curated_path=curated_path
     )
+    
+    # Add synthetic vulnerable examples for better pattern coverage
+    if config["data"]["sources"].get("synthetic", True):
+        try:
+            from data_processing.synthetic_vulnerabilities import generate_synthetic_vulnerabilities, generate_simple_safe_examples
+            
+            synthetic_count = config["dataset"].get("diversity", {}).get("synthetic_count", 200)
+            print(f"\n🔧 Adding {synthetic_count} synthetic vulnerability examples per category...")
+            
+            synthetic_examples = generate_synthetic_vulnerabilities(
+                num_per_category=synthetic_count // 7,  # ~7 vulnerability categories
+                include_safe=False  # Only add vulnerable examples here
+            )
+            
+            # Convert to our format
+            for syn_ex in synthetic_examples:
+                vulnerable_examples.append({
+                    "code": syn_ex["code"],
+                    "label": 1,
+                    "advisory_id": f"synthetic_{syn_ex['category']}",
+                    "cwe_id": syn_ex.get("cwe", ""),
+                    "severity": "MEDIUM",
+                    "quality_score": 1.0,  # Synthetic = perfect quality
+                    "source": "synthetic"
+                })
+            
+            print(f"✓ Added {len(synthetic_examples)} synthetic vulnerable examples")
+            
+            # Count by category
+            from collections import Counter
+            categories = Counter(ex.get("category", "unknown") for ex in synthetic_examples)
+            print("   Categories:", dict(categories))
+            
+            # Also add SIMPLE SAFE examples - critical for avoiding false positives
+            simple_safe_count = config["dataset"].get("diversity", {}).get("simple_safe_count", 500)
+            print(f"\n🛡️ Adding {simple_safe_count} simple safe code examples...")
+            
+            simple_safe_examples = generate_simple_safe_examples(count=simple_safe_count)
+            
+            # These go into safe_examples later, but we track them separately
+            print(f"✓ Generated {len(simple_safe_examples)} simple safe examples")
+            safe_categories = Counter(ex.get("category", "unknown") for ex in simple_safe_examples)
+            print("   Categories:", dict(safe_categories))
+            
+        except ImportError as e:
+            print(f"⚠️  Could not load synthetic vulnerabilities: {e}")
+            simple_safe_examples = []
+    else:
+        simple_safe_examples = []
 
     # Stream and process safe examples from CodeSearchNet
     if config["data"]["sources"].get("codesearchnet", True):
@@ -212,19 +276,37 @@ def create_dataset(config: Dict[str, Any]):
     else:
         print("⚠️  CodeSearchNet disabled in config - no safe examples loaded")
         safe_examples = []
+    
+    # Add synthetic simple safe examples (critical for avoiding false positives on simple code)
+    if simple_safe_examples:
+        for syn_safe in simple_safe_examples:
+            safe_examples.append({
+                "code": syn_safe["code"],
+                "label": 0,  # Safe
+                "repo": "synthetic",
+                "path": syn_safe.get("category", "simple_safe"),
+                "source": "synthetic_safe",
+                "quality_score": syn_safe.get("quality_score", 1.0)
+            })
+        print(f"✓ Added {len(simple_safe_examples)} synthetic safe examples to safe pool")
 
     all_examples = vulnerable_examples + safe_examples
     
-    print(f"\n📊 Dataset Composition:")
+    print(f"\n📊 Dataset Composition (Before Conversion):")
     print(f"   Vulnerable: {len(vulnerable_examples)}")
     print(f"   Safe: {len(safe_examples)}")
     print(f"   Total: {len(all_examples)}")
     print(f"   Ratio: 1:{len(safe_examples)//len(vulnerable_examples) if vulnerable_examples else 0}")
 
-    # Convert all examples to graphs
+    # Convert all examples to graphs with detailed tracking
     print(f"\n🔄 Converting {len(all_examples)} code examples to graphs...")
     graph_dataset = []
-    failed_conversions = 0
+    
+    # Track conversion stats separately for vulnerable and safe
+    vuln_success = 0
+    vuln_fail = 0
+    safe_success = 0
+    safe_fail = 0
     
     for example in tqdm(all_examples, desc="Converting code to graphs"):
         pyg_graph = code_to_pyg_graph(
@@ -235,9 +317,56 @@ def create_dataset(config: Dict[str, Any]):
         )
         if pyg_graph:
             graph_dataset.append(pyg_graph)
+            if example["label"] == 1:
+                vuln_success += 1
+            else:
+                safe_success += 1
         else:
-            failed_conversions += 1
+            if example["label"] == 1:
+                vuln_fail += 1
+            else:
+                safe_fail += 1
 
+    # Calculate conversion rates
+    vuln_total = vuln_success + vuln_fail
+    safe_total = safe_success + safe_fail
+    total_success = vuln_success + safe_success
+    total_fail = vuln_fail + safe_fail
+    total = total_success + total_fail
+    
+    # Print detailed conversion statistics
+    print(f"\n" + "="*60)
+    print("📈 CONVERSION STATISTICS")
+    print("="*60)
+    
+    print(f"\n🔴 Vulnerable Examples:")
+    print(f"   Input:      {vuln_total:,}")
+    print(f"   Converted:  {vuln_success:,}")
+    print(f"   Failed:     {vuln_fail:,}")
+    print(f"   Success Rate: {100*vuln_success/vuln_total:.1f}%" if vuln_total > 0 else "   Success Rate: N/A")
+    
+    print(f"\n🟢 Safe Examples:")
+    print(f"   Input:      {safe_total:,}")
+    print(f"   Converted:  {safe_success:,}")
+    print(f"   Failed:     {safe_fail:,}")
+    print(f"   Success Rate: {100*safe_success/safe_total:.1f}%" if safe_total > 0 else "   Success Rate: N/A")
+    
+    print(f"\n📊 Total:")
+    print(f"   Input:      {total:,}")
+    print(f"   Converted:  {total_success:,}")
+    print(f"   Failed:     {total_fail:,}")
+    print(f"   Success Rate: {100*total_success/total:.1f}%" if total > 0 else "   Success Rate: N/A")
+    
+    # Final dataset composition
+    print(f"\n" + "="*60)
+    print("📦 FINAL DATASET COMPOSITION")
+    print("="*60)
+    print(f"   Vulnerable graphs: {vuln_success:,}")
+    print(f"   Safe graphs:       {safe_success:,}")
+    print(f"   Total graphs:      {total_success:,}")
+    if vuln_success > 0:
+        print(f"   Final Ratio:       1:{safe_success/vuln_success:.1f} (vulnerable:safe)")
+    
     # Save the final dataset
     output_path = config["data"]["processed_dataset_path"]
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -245,10 +374,35 @@ def create_dataset(config: Dict[str, Any]):
     print(f"\n💾 Saving {len(graph_dataset)} graphs to {output_path}...")
     torch.save(graph_dataset, output_path)
     
+    # Save conversion stats to JSON for tracking
+    stats = {
+        "vulnerable": {
+            "input": vuln_total,
+            "converted": vuln_success,
+            "failed": vuln_fail,
+            "success_rate": round(100*vuln_success/vuln_total, 2) if vuln_total > 0 else 0
+        },
+        "safe": {
+            "input": safe_total,
+            "converted": safe_success,
+            "failed": safe_fail,
+            "success_rate": round(100*safe_success/safe_total, 2) if safe_total > 0 else 0
+        },
+        "total": {
+            "input": total,
+            "converted": total_success,
+            "failed": total_fail,
+            "success_rate": round(100*total_success/total, 2) if total > 0 else 0
+        },
+        "final_ratio": round(safe_success/vuln_success, 2) if vuln_success > 0 else 0
+    }
+    
+    stats_path = output_path.replace(".pt", "_stats.json")
+    with open(stats_path, "w") as f:
+        json.dump(stats, f, indent=2)
+    print(f"📊 Conversion stats saved to {stats_path}")
+    
     print(f"\n✅ Dataset Creation Complete!")
-    print(f"   Successfully converted: {len(graph_dataset)} graphs")
-    print(f"   Failed conversions: {failed_conversions} ({100*failed_conversions/len(all_examples):.1f}%)")
-    print(f"   Output: {output_path}")
     print("="*60)
 
 
